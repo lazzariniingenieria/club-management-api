@@ -31,13 +31,13 @@ src/main/java/.../
 ## Core Domain (current design)
 
 Nine tables: `club`, `family_group`, `member`, `user_account`, `payment`, `court`,
-`court_block`, `recurring_slot`, `booking`.
+`court_block`, `recurring_slot`, `reservation`.
 
 - Multi-tenant via `club_id` on all tenant-scoped tables.
 - `user_account.member_id` is nullable: an admin may or may not also be a member.
 - `recurring_slot` unifies recurring member slots and club activities (Single
-  Table Inheritance, discriminated by `booking.source IN ('MEMBER','RECURRING','ACTIVITY')`).
-- No scheduled jobs: slot/booking generation is atomic and one-shot, bounded
+  Table Inheritance, discriminated by `reservation.origin IN ('MEMBER','RECURRING','ACTIVITY')`).
+- No scheduled jobs: slot/reservation generation is atomic and one-shot, bounded
   by a mandatory `valid_until` (max one year).
 
 ## Instructions for AI Assistants (Claude Code, Copilot, etc.)
@@ -72,11 +72,15 @@ When writing or modifying code in this repository, follow these rules strictly:
 
 ## Getting Started
 
+Localhost is used only to run tests — the API is never run locally against a
+persistent database. The PostgreSQL database lives only on Render, and the
+API is deployed and tested there.
+
 ```bash
-./mvnw spring-boot:run
+./mvnw clean verify
 ```
 
-Environment variables (see `application.yml` / Render dashboard):
+Runtime configuration (see `application.properties` / Render dashboard):
 
 - `DATABASE_URL`
 - `SPRING_PROFILES_ACTIVE`
