@@ -28,7 +28,7 @@ public class AuthService {
     }
 
     public LoginResponseDto login(LoginRequestDto request) {
-        UserAccount user = userAccountRepository.findByClubIdAndNationalId(request.clubId(), request.nationalId())
+        UserAccount user = userAccountRepository.findByClubIdAndDni(request.clubId(), request.dni())
                 .orElseThrow(() -> loginRejected(request));
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
@@ -36,11 +36,13 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(user);
+
         return new LoginResponseDto(token, user.getRole(), user.getMemberId());
     }
 
     private InvalidCredentialsException loginRejected(LoginRequestDto request) {
-        log.warn("Login rejected for clubId={}, nationalId={}", request.clubId(), request.nationalId());
+        log.warn("Login rejected for clubId={}, dni={}", request.clubId(), request.dni());
+
         return new InvalidCredentialsException();
     }
 }

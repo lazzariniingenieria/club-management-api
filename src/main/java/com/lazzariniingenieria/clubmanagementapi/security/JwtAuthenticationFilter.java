@@ -23,8 +23,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+                                     FilterChain filterChain) throws ServletException, IOException {
         extractToken(request)
                 .filter(jwtService::isTokenValid)
                 .map(jwtService::extractAuthenticatedUser)
@@ -37,6 +37,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (header == null || !header.startsWith(BEARER_PREFIX)) {
             return Optional.empty();
         }
+
         return Optional.of(header.substring(BEARER_PREFIX.length()));
     }
 

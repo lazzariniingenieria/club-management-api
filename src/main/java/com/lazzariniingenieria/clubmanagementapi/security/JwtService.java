@@ -26,8 +26,9 @@ public class JwtService {
 
     public String generateToken(UserAccount user) {
         Instant now = Instant.now();
+
         return Jwts.builder()
-                .subject(user.getNationalId())
+                .subject(user.getDni())
                 .claim("userAccountId", user.getId())
                 .claim("clubId", user.getClubId())
                 .claim("role", user.getRole().name())
@@ -41,6 +42,7 @@ public class JwtService {
     public boolean isTokenValid(String token) {
         try {
             parseClaims(token);
+
             return true;
         } catch (JwtException | IllegalArgumentException exception) {
             return false;
@@ -49,6 +51,7 @@ public class JwtService {
 
     public AuthenticatedUser extractAuthenticatedUser(String token) {
         Claims claims = parseClaims(token);
+
         return new AuthenticatedUser(
                 claims.get("userAccountId", Long.class),
                 claims.get("clubId", Long.class),

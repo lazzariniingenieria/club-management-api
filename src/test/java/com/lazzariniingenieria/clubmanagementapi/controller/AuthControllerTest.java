@@ -56,12 +56,12 @@ class AuthControllerTest {
     void shouldReturnBadRequestWhenClubIdIsMissing() throws Exception {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"nationalId\":\"30111222\",\"password\":\"s3cr3t123\"}"))
+                        .content("{\"dni\":\"30111222\",\"password\":\"s3cr3t123\"}"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    void shouldReturnBadRequestWhenNationalIdIsBlank() throws Exception {
+    void shouldReturnBadRequestWhenDniIsBlank() throws Exception {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new LoginRequestDto(1L, "", "s3cr3t123"))))

@@ -19,6 +19,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ApiErrorDto> handleInvalidCredentials(InvalidCredentialsException exception) {
         log.warn("Login attempt rejected: {}", exception.getMessage());
+
         return buildResponse(HttpStatus.UNAUTHORIZED, exception.getMessage(), List.of());
     }
 
@@ -27,11 +28,20 @@ public class GlobalExceptionHandler {
         List<String> details = exception.getBindingResult().getFieldErrors().stream()
                 .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
                 .toList();
+
         return buildResponse(HttpStatus.BAD_REQUEST, "Validation failed", details);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiErrorDto> handleUnexpectedError(Exception exception) {
+        log.error("Unexpected error while handling request", exception);
+
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error", List.of());
     }
 
     private ResponseEntity<ApiErrorDto> buildResponse(HttpStatus status, String message, List<String> details) {
         ApiErrorDto body = new ApiErrorDto(Instant.now(), status.value(), status.getReasonPhrase(), message, details);
+
         return ResponseEntity.status(status).body(body);
     }
 }

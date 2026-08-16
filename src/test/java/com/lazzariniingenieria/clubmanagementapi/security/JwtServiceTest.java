@@ -24,7 +24,7 @@ class JwtServiceTest {
                 .id(1L)
                 .clubId(10L)
                 .memberId(5L)
-                .nationalId("30111222")
+                .dni("30111222")
                 .role(UserRole.ADMIN)
                 .build();
 
@@ -44,7 +44,7 @@ class JwtServiceTest {
                 .id(2L)
                 .clubId(10L)
                 .memberId(null)
-                .nationalId("30111222")
+                .dni("30111222")
                 .role(UserRole.SUPER_ADMIN)
                 .build();
 
@@ -58,7 +58,7 @@ class JwtServiceTest {
         UserAccount user = UserAccount.builder()
                 .id(1L)
                 .clubId(10L)
-                .nationalId("30111222")
+                .dni("30111222")
                 .role(UserRole.MEMBER)
                 .build();
 
@@ -73,7 +73,7 @@ class JwtServiceTest {
         UserAccount user = UserAccount.builder()
                 .id(1L)
                 .clubId(10L)
-                .nationalId("30111222")
+                .dni("30111222")
                 .role(UserRole.MEMBER)
                 .build();
 

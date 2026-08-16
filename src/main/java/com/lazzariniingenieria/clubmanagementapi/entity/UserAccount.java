@@ -40,7 +40,7 @@ public class UserAccount {
     private Long memberId;
 
     @Column(name = "national_id", nullable = false, length = 20)
-    private String nationalId;
+    private String dni;
 
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;

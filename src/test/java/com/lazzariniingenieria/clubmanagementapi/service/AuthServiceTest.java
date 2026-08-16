@@ -24,7 +24,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class AuthServiceTest {
 
     private static final Long CLUB_ID = 1L;
-    private static final String NATIONAL_ID = "30111222";
+    private static final String DNI = "30111222";
     private static final String RAW_PASSWORD = "s3cr3t123";
     private static final String HASHED_PASSWORD = "hashed-password";
 
@@ -47,9 +47,9 @@ class AuthServiceTest {
     @Test
     void shouldReturnTokenRoleAndMemberIdWhenCredentialsAreValid() {
         UserAccount user = memberUser();
-        LoginRequestDto request = new LoginRequestDto(CLUB_ID, NATIONAL_ID, RAW_PASSWORD);
+        LoginRequestDto request = new LoginRequestDto(CLUB_ID, DNI, RAW_PASSWORD);
 
-        when(userAccountRepository.findByClubIdAndNationalId(CLUB_ID, NATIONAL_ID)).thenReturn(Optional.of(user));
+        when(userAccountRepository.findByClubIdAndDni(CLUB_ID, DNI)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(RAW_PASSWORD, HASHED_PASSWORD)).thenReturn(true);
         when(jwtService.generateToken(user)).thenReturn("signed-token");
 
@@ -61,9 +61,9 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldThrowInvalidCredentialsWhenClubAndNationalIdCombinationDoesNotExist() {
-        LoginRequestDto request = new LoginRequestDto(CLUB_ID, NATIONAL_ID, RAW_PASSWORD);
-        when(userAccountRepository.findByClubIdAndNationalId(CLUB_ID, NATIONAL_ID)).thenReturn(Optional.empty());
+    void shouldThrowInvalidCredentialsWhenClubAndDniCombinationDoesNotExist() {
+        LoginRequestDto request = new LoginRequestDto(CLUB_ID, DNI, RAW_PASSWORD);
+        when(userAccountRepository.findByClubIdAndDni(CLUB_ID, DNI)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
 
@@ -73,9 +73,9 @@ class AuthServiceTest {
     @Test
     void shouldThrowInvalidCredentialsWhenPasswordDoesNotMatch() {
         UserAccount user = memberUser();
-        LoginRequestDto request = new LoginRequestDto(CLUB_ID, NATIONAL_ID, "wrong-password");
+        LoginRequestDto request = new LoginRequestDto(CLUB_ID, DNI, "wrong-password");
 
-        when(userAccountRepository.findByClubIdAndNationalId(CLUB_ID, NATIONAL_ID)).thenReturn(Optional.of(user));
+        when(userAccountRepository.findByClubIdAndDni(CLUB_ID, DNI)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong-password", HASHED_PASSWORD)).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
@@ -84,9 +84,9 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldThrowInvalidCredentialsWhenSameNationalIdBelongsToAnotherClub() {
-        LoginRequestDto request = new LoginRequestDto(99L, NATIONAL_ID, RAW_PASSWORD);
-        when(userAccountRepository.findByClubIdAndNationalId(99L, NATIONAL_ID)).thenReturn(Optional.empty());
+    void shouldThrowInvalidCredentialsWhenSameDniBelongsToAnotherClub() {
+        LoginRequestDto request = new LoginRequestDto(99L, DNI, RAW_PASSWORD);
+        when(userAccountRepository.findByClubIdAndDni(99L, DNI)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
     }
@@ -96,7 +96,7 @@ class AuthServiceTest {
                 .id(1L)
                 .clubId(CLUB_ID)
                 .memberId(7L)
-                .nationalId(NATIONAL_ID)
+                .dni(DNI)
                 .passwordHash(HASHED_PASSWORD)
                 .role(UserRole.MEMBER)
                 .build();
