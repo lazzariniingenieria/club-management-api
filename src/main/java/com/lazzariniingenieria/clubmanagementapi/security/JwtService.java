@@ -1,6 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.security;
 
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
+import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -26,23 +27,15 @@ public class JwtService {
     public String generateToken(UserAccount user) {
         Instant now = Instant.now();
         return Jwts.builder()
-                .subject(user.getDni())
-                .claim("userId", user.getId())
+                .subject(user.getNationalId())
+                .claim("userAccountId", user.getId())
+                .claim("clubId", user.getClubId())
                 .claim("role", user.getRole().name())
                 .claim("memberId", user.getMemberId())
-                .claim("clubId", user.getClubId())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(expirationMs)))
                 .signWith(signingKey)
                 .compact();
-    }
-
-    public long getExpirationSeconds() {
-        return expirationMs / 1000;
-    }
-
-    public String extractDni(String token) {
-        return parseClaims(token).getSubject();
     }
 
     public boolean isTokenValid(String token) {
@@ -52,6 +45,15 @@ public class JwtService {
         } catch (JwtException | IllegalArgumentException exception) {
             return false;
         }
+    }
+
+    public AuthenticatedUser extractAuthenticatedUser(String token) {
+        Claims claims = parseClaims(token);
+        return new AuthenticatedUser(
+                claims.get("userAccountId", Long.class),
+                claims.get("clubId", Long.class),
+                UserRole.valueOf(claims.get("role", String.class)),
+                claims.get("memberId", Long.class));
     }
 
     private Claims parseClaims(String token) {

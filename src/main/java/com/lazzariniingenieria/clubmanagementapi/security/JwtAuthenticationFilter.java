@@ -1,7 +1,5 @@
 package com.lazzariniingenieria.clubmanagementapi.security;
 
-import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
-import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,11 +17,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
-    private final UserAccountRepository userAccountRepository;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserAccountRepository userAccountRepository) {
+    public JwtAuthenticationFilter(JwtService jwtService) {
         this.jwtService = jwtService;
-        this.userAccountRepository = userAccountRepository;
     }
 
     @Override
@@ -31,9 +27,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         extractToken(request)
                 .filter(jwtService::isTokenValid)
-                .map(jwtService::extractDni)
-                .flatMap(userAccountRepository::findByDni)
-                .filter(UserAccount::isActive)
+                .map(jwtService::extractAuthenticatedUser)
                 .ifPresent(this::authenticate);
         filterChain.doFilter(request, response);
     }
@@ -46,9 +40,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return Optional.of(header.substring(BEARER_PREFIX.length()));
     }
 
-    private void authenticate(UserAccount user) {
-        var authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
-        var authentication = new UsernamePasswordAuthenticationToken(user.getDni(), null, List.of(authority));
+    private void authenticate(AuthenticatedUser user) {
+        var authority = new SimpleGrantedAuthority("ROLE_" + user.role().name());
+        var authentication = new UsernamePasswordAuthenticationToken(user, null, List.of(authority));
         SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 }

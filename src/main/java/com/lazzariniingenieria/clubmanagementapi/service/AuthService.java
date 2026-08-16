@@ -3,9 +3,7 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequestDto;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponseDto;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
-import com.lazzariniingenieria.clubmanagementapi.exception.AccountDisabledException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
-import com.lazzariniingenieria.clubmanagementapi.mapper.UserAccountMapper;
 import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
 import org.slf4j.Logger;
@@ -21,36 +19,28 @@ public class AuthService {
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final UserAccountMapper userAccountMapper;
 
     public AuthService(UserAccountRepository userAccountRepository, PasswordEncoder passwordEncoder,
-                        JwtService jwtService, UserAccountMapper userAccountMapper) {
+                        JwtService jwtService) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-        this.userAccountMapper = userAccountMapper;
     }
 
     public LoginResponseDto login(LoginRequestDto request) {
-        UserAccount user = userAccountRepository.findByDni(request.dni())
-                .orElseThrow(() -> loginRejected(request.dni(), "dni not found"));
+        UserAccount user = userAccountRepository.findByClubIdAndNationalId(request.clubId(), request.nationalId())
+                .orElseThrow(() -> loginRejected(request));
 
-        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw loginRejected(request.dni(), "password mismatch");
-        }
-
-        if (!user.isActive()) {
-            log.warn("Login rejected for dni={}: account disabled", request.dni());
-            throw new AccountDisabledException();
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw loginRejected(request);
         }
 
         String token = jwtService.generateToken(user);
-        return new LoginResponseDto(token, "Bearer", jwtService.getExpirationSeconds(),
-                userAccountMapper.toSummaryDto(user));
+        return new LoginResponseDto(token, user.getRole(), user.getMemberId());
     }
 
-    private InvalidCredentialsException loginRejected(String dni, String reason) {
-        log.warn("Login rejected for dni={}: {}", dni, reason);
+    private InvalidCredentialsException loginRejected(LoginRequestDto request) {
+        log.warn("Login rejected for clubId={}, nationalId={}", request.clubId(), request.nationalId());
         return new InvalidCredentialsException();
     }
 }

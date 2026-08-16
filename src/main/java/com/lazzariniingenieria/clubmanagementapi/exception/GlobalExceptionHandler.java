@@ -22,12 +22,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.UNAUTHORIZED, exception.getMessage(), List.of());
     }
 
-    @ExceptionHandler(AccountDisabledException.class)
-    public ResponseEntity<ApiErrorDto> handleAccountDisabled(AccountDisabledException exception) {
-        log.warn("Login attempt rejected: {}", exception.getMessage());
-        return buildResponse(HttpStatus.FORBIDDEN, exception.getMessage(), List.of());
-    }
-
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorDto> handleValidation(MethodArgumentNotValidException exception) {
         List<String> details = exception.getBindingResult().getFieldErrors().stream()

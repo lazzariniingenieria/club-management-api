@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserAccountRepository extends JpaRepository<UserAccount, Long> {
 
-    Optional<UserAccount> findByDni(String dni);
+    Optional<UserAccount> findByClubIdAndNationalId(Long clubId, String nationalId);
 }

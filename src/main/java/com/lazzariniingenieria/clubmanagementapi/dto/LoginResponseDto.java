@@ -1,4 +1,6 @@
 package com.lazzariniingenieria.clubmanagementapi.dto;
 
-public record LoginResponseDto(String accessToken, String tokenType, long expiresInSeconds, UserSummaryDto user) {
+import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
+
+public record LoginResponseDto(String accessToken, UserRole role, Long memberId) {
 }

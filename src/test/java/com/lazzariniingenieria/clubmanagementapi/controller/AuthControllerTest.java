@@ -11,11 +11,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequestDto;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponseDto;
-import com.lazzariniingenieria.clubmanagementapi.dto.UserSummaryDto;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
-import com.lazzariniingenieria.clubmanagementapi.exception.AccountDisabledException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
-import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
 import com.lazzariniingenieria.clubmanagementapi.service.AuthService;
 import org.junit.jupiter.api.Test;
@@ -41,28 +38,33 @@ class AuthControllerTest {
     @MockitoBean
     private JwtService jwtService;
 
-    @MockitoBean
-    private UserAccountRepository userAccountRepository;
-
     @Test
-    void shouldReturnTokenWhenCredentialsAreValid() throws Exception {
-        LoginResponseDto response = new LoginResponseDto("token-123", "Bearer", 3600L,
-                new UserSummaryDto(1L, "30111222", UserRole.MEMBER, null, 1L));
+    void shouldReturnTokenRoleAndMemberIdWhenCredentialsAreValid() throws Exception {
+        LoginResponseDto response = new LoginResponseDto("token-123", UserRole.MEMBER, 7L);
         when(authService.login(any(LoginRequestDto.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDto("30111222", "s3cr3t"))))
+                        .content(objectMapper.writeValueAsString(new LoginRequestDto(1L, "30111222", "s3cr3t123"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken", is("token-123")))
-                .andExpect(jsonPath("$.user.dni", is("30111222")));
+                .andExpect(jsonPath("$.role", is("MEMBER")))
+                .andExpect(jsonPath("$.memberId", is(7)));
     }
 
     @Test
-    void shouldReturnBadRequestWhenDniIsBlank() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/login")
+    void shouldReturnBadRequestWhenClubIdIsMissing() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDto("", "s3cr3t"))))
+                        .content("{\"nationalId\":\"30111222\",\"password\":\"s3cr3t123\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenNationalIdIsBlank() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequestDto(1L, "", "s3cr3t123"))))
                 .andExpect(status().isBadRequest());
     }
 
@@ -70,19 +72,9 @@ class AuthControllerTest {
     void shouldReturnUnauthorizedWhenCredentialsAreInvalid() throws Exception {
         when(authService.login(any(LoginRequestDto.class))).thenThrow(new InvalidCredentialsException());
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDto("30111222", "wrong"))))
+                        .content(objectMapper.writeValueAsString(new LoginRequestDto(1L, "30111222", "wrong"))))
                 .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void shouldReturnForbiddenWhenAccountIsDisabled() throws Exception {
-        when(authService.login(any(LoginRequestDto.class))).thenThrow(new AccountDisabledException());
-
-        mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDto("30111222", "s3cr3t"))))
-                .andExpect(status().isForbidden());
     }
 }

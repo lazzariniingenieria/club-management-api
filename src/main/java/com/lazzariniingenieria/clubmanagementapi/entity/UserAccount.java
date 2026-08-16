@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -16,7 +17,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "user_account")
+@Table(name = "user_account", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_user_account_club_national_id", columnNames = {"club_id", "national_id"}),
+        @UniqueConstraint(name = "uk_user_account_member_id", columnNames = {"member_id"})
+})
 @Getter
 @Setter
 @Builder
@@ -29,24 +33,24 @@ public class UserAccount {
     @Column(name = "id")
     private Long id;
 
-    @Column(name = "dni", nullable = false, unique = true)
-    private String dni;
-
-    @Column(name = "password", nullable = false)
-    private String password;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "role", nullable = false)
-    private UserRole role;
+    @Column(name = "club_id", nullable = false)
+    private Long clubId;
 
     @Column(name = "member_id")
     private Long memberId;
 
-    @Column(name = "club_id", nullable = false)
-    private Long clubId;
+    @Column(name = "national_id", nullable = false, length = 20)
+    private String nationalId;
 
-    @Column(name = "active", nullable = false)
-    private boolean active;
+    @Column(name = "password_hash", nullable = false, length = 255)
+    private String passwordHash;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 20)
+    private UserRole role;
+
+    @Column(name = "email", length = 150)
+    private String email;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

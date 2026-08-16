@@ -7,12 +7,9 @@ import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequestDto;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponseDto;
-import com.lazzariniingenieria.clubmanagementapi.dto.UserSummaryDto;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
-import com.lazzariniingenieria.clubmanagementapi.exception.AccountDisabledException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
-import com.lazzariniingenieria.clubmanagementapi.mapper.UserAccountMapper;
 import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
 import java.util.Optional;
@@ -26,8 +23,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
-    private static final String DNI = "30111222";
-    private static final String RAW_PASSWORD = "s3cr3t";
+    private static final Long CLUB_ID = 1L;
+    private static final String NATIONAL_ID = "30111222";
+    private static final String RAW_PASSWORD = "s3cr3t123";
     private static final String HASHED_PASSWORD = "hashed-password";
 
     @Mock
@@ -39,40 +37,33 @@ class AuthServiceTest {
     @Mock
     private JwtService jwtService;
 
-    @Mock
-    private UserAccountMapper userAccountMapper;
-
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userAccountRepository, passwordEncoder, jwtService, userAccountMapper);
+        authService = new AuthService(userAccountRepository, passwordEncoder, jwtService);
     }
 
     @Test
-    void shouldReturnTokenAndUserSummaryWhenCredentialsAreValid() {
-        UserAccount user = activeUser();
-        LoginRequestDto request = new LoginRequestDto(DNI, RAW_PASSWORD);
-        UserSummaryDto summary = new UserSummaryDto(1L, DNI, UserRole.MEMBER, null, 1L);
+    void shouldReturnTokenRoleAndMemberIdWhenCredentialsAreValid() {
+        UserAccount user = memberUser();
+        LoginRequestDto request = new LoginRequestDto(CLUB_ID, NATIONAL_ID, RAW_PASSWORD);
 
-        when(userAccountRepository.findByDni(DNI)).thenReturn(Optional.of(user));
+        when(userAccountRepository.findByClubIdAndNationalId(CLUB_ID, NATIONAL_ID)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(RAW_PASSWORD, HASHED_PASSWORD)).thenReturn(true);
         when(jwtService.generateToken(user)).thenReturn("signed-token");
-        when(jwtService.getExpirationSeconds()).thenReturn(3600L);
-        when(userAccountMapper.toSummaryDto(user)).thenReturn(summary);
 
         LoginResponseDto response = authService.login(request);
 
         assertThat(response.accessToken()).isEqualTo("signed-token");
-        assertThat(response.tokenType()).isEqualTo("Bearer");
-        assertThat(response.expiresInSeconds()).isEqualTo(3600L);
-        assertThat(response.user()).isEqualTo(summary);
+        assertThat(response.role()).isEqualTo(UserRole.MEMBER);
+        assertThat(response.memberId()).isEqualTo(7L);
     }
 
     @Test
-    void shouldThrowInvalidCredentialsWhenDniDoesNotExist() {
-        LoginRequestDto request = new LoginRequestDto(DNI, RAW_PASSWORD);
-        when(userAccountRepository.findByDni(DNI)).thenReturn(Optional.empty());
+    void shouldThrowInvalidCredentialsWhenClubAndNationalIdCombinationDoesNotExist() {
+        LoginRequestDto request = new LoginRequestDto(CLUB_ID, NATIONAL_ID, RAW_PASSWORD);
+        when(userAccountRepository.findByClubIdAndNationalId(CLUB_ID, NATIONAL_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
 
@@ -81,10 +72,10 @@ class AuthServiceTest {
 
     @Test
     void shouldThrowInvalidCredentialsWhenPasswordDoesNotMatch() {
-        UserAccount user = activeUser();
-        LoginRequestDto request = new LoginRequestDto(DNI, "wrong-password");
+        UserAccount user = memberUser();
+        LoginRequestDto request = new LoginRequestDto(CLUB_ID, NATIONAL_ID, "wrong-password");
 
-        when(userAccountRepository.findByDni(DNI)).thenReturn(Optional.of(user));
+        when(userAccountRepository.findByClubIdAndNationalId(CLUB_ID, NATIONAL_ID)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong-password", HASHED_PASSWORD)).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
@@ -93,27 +84,21 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldThrowAccountDisabledWhenUserIsInactive() {
-        UserAccount user = activeUser();
-        user.setActive(false);
-        LoginRequestDto request = new LoginRequestDto(DNI, RAW_PASSWORD);
+    void shouldThrowInvalidCredentialsWhenSameNationalIdBelongsToAnotherClub() {
+        LoginRequestDto request = new LoginRequestDto(99L, NATIONAL_ID, RAW_PASSWORD);
+        when(userAccountRepository.findByClubIdAndNationalId(99L, NATIONAL_ID)).thenReturn(Optional.empty());
 
-        when(userAccountRepository.findByDni(DNI)).thenReturn(Optional.of(user));
-        when(passwordEncoder.matches(RAW_PASSWORD, HASHED_PASSWORD)).thenReturn(true);
-
-        assertThatThrownBy(() -> authService.login(request)).isInstanceOf(AccountDisabledException.class);
-
-        verifyNoInteractions(jwtService);
+        assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
     }
 
-    private UserAccount activeUser() {
+    private UserAccount memberUser() {
         return UserAccount.builder()
                 .id(1L)
-                .dni(DNI)
-                .password(HASHED_PASSWORD)
+                .clubId(CLUB_ID)
+                .memberId(7L)
+                .nationalId(NATIONAL_ID)
+                .passwordHash(HASHED_PASSWORD)
                 .role(UserRole.MEMBER)
-                .clubId(1L)
-                .active(true)
                 .build();
     }
 }

@@ -19,29 +19,47 @@ class JwtServiceTest {
     }
 
     @Test
-    void shouldGenerateTokenAndExtractDniFromIt() {
+    void shouldGenerateTokenAndExtractAuthenticatedUserFromIt() {
         UserAccount user = UserAccount.builder()
                 .id(1L)
-                .dni("30111222")
-                .role(UserRole.MEMBER)
-                .clubId(1L)
-                .active(true)
+                .clubId(10L)
+                .memberId(5L)
+                .nationalId("30111222")
+                .role(UserRole.ADMIN)
                 .build();
 
         String token = jwtService.generateToken(user);
 
         assertThat(jwtService.isTokenValid(token)).isTrue();
-        assertThat(jwtService.extractDni(token)).isEqualTo("30111222");
+        AuthenticatedUser authenticatedUser = jwtService.extractAuthenticatedUser(token);
+        assertThat(authenticatedUser.userAccountId()).isEqualTo(1L);
+        assertThat(authenticatedUser.clubId()).isEqualTo(10L);
+        assertThat(authenticatedUser.role()).isEqualTo(UserRole.ADMIN);
+        assertThat(authenticatedUser.memberId()).isEqualTo(5L);
+    }
+
+    @Test
+    void shouldExtractNullMemberIdWhenUserHasNoLinkedMember() {
+        UserAccount user = UserAccount.builder()
+                .id(2L)
+                .clubId(10L)
+                .memberId(null)
+                .nationalId("30111222")
+                .role(UserRole.SUPER_ADMIN)
+                .build();
+
+        String token = jwtService.generateToken(user);
+
+        assertThat(jwtService.extractAuthenticatedUser(token).memberId()).isNull();
     }
 
     @Test
     void shouldRejectTamperedToken() {
         UserAccount user = UserAccount.builder()
                 .id(1L)
-                .dni("30111222")
+                .clubId(10L)
+                .nationalId("30111222")
                 .role(UserRole.MEMBER)
-                .clubId(1L)
-                .active(true)
                 .build();
 
         String token = jwtService.generateToken(user);
@@ -54,20 +72,14 @@ class JwtServiceTest {
     void shouldRejectTokenSignedWithDifferentSecret() {
         UserAccount user = UserAccount.builder()
                 .id(1L)
-                .dni("30111222")
+                .clubId(10L)
+                .nationalId("30111222")
                 .role(UserRole.MEMBER)
-                .clubId(1L)
-                .active(true)
                 .build();
 
         JwtService otherJwtService = new JwtService("a-completely-different-secret-key-32-bytes-min", 3_600_000L);
         String token = otherJwtService.generateToken(user);
 
         assertThat(jwtService.isTokenValid(token)).isFalse();
-    }
-
-    @Test
-    void shouldExposeConfiguredExpirationInSeconds() {
-        assertThat(jwtService.getExpirationSeconds()).isEqualTo(3600L);
     }
 }
