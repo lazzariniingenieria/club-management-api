@@ -2,19 +2,19 @@ package com.lazzariniingenieria.clubmanagementapi.exception;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.ApiErrorDto;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
-
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ApiErrorDto> handleInvalidCredentials(InvalidCredentialsException exception) {
@@ -25,9 +25,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorDto> handleValidation(MethodArgumentNotValidException exception) {
-        List<String> details = exception.getBindingResult().getFieldErrors().stream()
-                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
-                .toList();
+        List<FieldError> fieldErrors = exception.getBindingResult().getFieldErrors();
+        List<String> details = new ArrayList<>();
+
+        for (FieldError fieldError : fieldErrors) {
+            String fieldName = fieldError.getField();
+            String errorMessage = fieldError.getDefaultMessage();
+            String detail = fieldName + ": " + errorMessage;
+            details.add(detail);
+        }
 
         return buildResponse(HttpStatus.BAD_REQUEST, "Validation failed", details);
     }

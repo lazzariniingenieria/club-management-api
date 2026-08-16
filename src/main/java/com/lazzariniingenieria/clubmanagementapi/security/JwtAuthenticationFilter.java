@@ -6,44 +6,50 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
-import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
-        this.jwtService = jwtService;
-    }
-
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                      FilterChain filterChain) throws ServletException, IOException {
-        extractToken(request)
-                .filter(jwtService::isTokenValid)
-                .map(jwtService::extractAuthenticatedUser)
-                .ifPresent(this::authenticate);
+        String token = extractToken(request);
+        boolean tokenPresentAndValid = token != null && jwtService.isTokenValid(token);
+
+        if (tokenPresentAndValid) {
+            AuthenticatedUser authenticatedUser = jwtService.extractAuthenticatedUser(token);
+            authenticate(authenticatedUser);
+        }
+
         filterChain.doFilter(request, response);
     }
 
-    private Optional<String> extractToken(HttpServletRequest request) {
+    private String extractToken(HttpServletRequest request) {
         String header = request.getHeader("Authorization");
-        if (header == null || !header.startsWith(BEARER_PREFIX)) {
-            return Optional.empty();
+        boolean hasBearerToken = header != null && header.startsWith(BEARER_PREFIX);
+
+        if (!hasBearerToken) {
+            return null;
         }
 
-        return Optional.of(header.substring(BEARER_PREFIX.length()));
+        return header.substring(BEARER_PREFIX.length());
     }
 
-    private void authenticate(AuthenticatedUser user) {
-        var authority = new SimpleGrantedAuthority("ROLE_" + user.role().name());
-        var authentication = new UsernamePasswordAuthenticationToken(user, null, List.of(authority));
+    private void authenticate(AuthenticatedUser authenticatedUser) {
+        String roleAuthority = "ROLE_" + authenticatedUser.role().name();
+        SimpleGrantedAuthority authority = new SimpleGrantedAuthority(roleAuthority);
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(authenticatedUser, null, List.of(authority));
+
         SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 }

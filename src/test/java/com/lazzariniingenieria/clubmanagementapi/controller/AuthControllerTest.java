@@ -7,7 +7,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequestDto;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponseDto;
@@ -15,6 +14,9 @@ import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
 import com.lazzariniingenieria.clubmanagementapi.service.AuthService;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -27,7 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import(SecurityConfig.class)
 class AuthControllerTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String FIXTURES_PATH = "fixtures/";
 
     @Autowired
     private MockMvc mockMvc;
@@ -40,12 +42,13 @@ class AuthControllerTest {
 
     @Test
     void shouldReturnTokenRoleAndMemberIdWhenCredentialsAreValid() throws Exception {
+        String requestBody = readFixture("login-request-valid.json");
         LoginResponseDto response = new LoginResponseDto("token-123", UserRole.MEMBER, 7L);
         when(authService.login(any(LoginRequestDto.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDto(1L, "30111222", "s3cr3t123"))))
+                        .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken", is("token-123")))
                 .andExpect(jsonPath("$.role", is("MEMBER")))
@@ -54,27 +57,42 @@ class AuthControllerTest {
 
     @Test
     void shouldReturnBadRequestWhenClubIdIsMissing() throws Exception {
+        String requestBody = readFixture("login-request-missing-club-id.json");
+
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dni\":\"30111222\",\"password\":\"s3cr3t123\"}"))
+                        .content(requestBody))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void shouldReturnBadRequestWhenDniIsBlank() throws Exception {
+        String requestBody = readFixture("login-request-blank-dni.json");
+
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDto(1L, "", "s3cr3t123"))))
+                        .content(requestBody))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void shouldReturnUnauthorizedWhenCredentialsAreInvalid() throws Exception {
+        String requestBody = readFixture("login-request-wrong-password.json");
         when(authService.login(any(LoginRequestDto.class))).thenThrow(new InvalidCredentialsException());
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDto(1L, "30111222", "wrong"))))
+                        .content(requestBody))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private String readFixture(String fileName) throws IOException {
+        String resourcePath = FIXTURES_PATH + fileName;
+
+        try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+            byte[] fileBytes = inputStream.readAllBytes();
+
+            return new String(fileBytes, StandardCharsets.UTF_8);
+        }
     }
 }
