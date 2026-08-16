@@ -1,7 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.service;
 
-import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequestDto;
-import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponseDto;
+import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponse;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
 import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
@@ -21,7 +21,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
-    public LoginResponseDto login(LoginRequestDto request) {
+    public LoginResponse login(LoginRequest request) {
         Optional<UserAccount> userAccount = userAccountRepository.findByClubIdAndDni(request.clubId(),
                 request.dni());
 
@@ -38,10 +38,10 @@ public class AuthService {
 
         String token = jwtService.generateToken(user);
 
-        return new LoginResponseDto(token, user.getRole(), user.getMemberId());
+        return new LoginResponse(token, user.getRole(), user.getMemberId());
     }
 
-    private InvalidCredentialsException loginRejected(LoginRequestDto request) {
+    private InvalidCredentialsException loginRejected(LoginRequest request) {
         log.warn("Login rejected for clubId={}, dni={}", request.clubId(), request.dni());
 
         return new InvalidCredentialsException();

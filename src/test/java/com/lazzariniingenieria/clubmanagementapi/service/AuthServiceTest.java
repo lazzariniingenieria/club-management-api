@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequestDto;
-import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponseDto;
+import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponse;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
@@ -47,13 +47,13 @@ class AuthServiceTest {
     @Test
     void shouldReturnTokenRoleAndMemberIdWhenCredentialsAreValid() {
         UserAccount user = memberUser();
-        LoginRequestDto request = new LoginRequestDto(CLUB_ID, DNI, RAW_PASSWORD);
+        LoginRequest request = new LoginRequest(CLUB_ID, DNI, RAW_PASSWORD);
 
         when(userAccountRepository.findByClubIdAndDni(CLUB_ID, DNI)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(RAW_PASSWORD, HASHED_PASSWORD)).thenReturn(true);
         when(jwtService.generateToken(user)).thenReturn("signed-token");
 
-        LoginResponseDto response = authService.login(request);
+        LoginResponse response = authService.login(request);
 
         assertThat(response.accessToken()).isEqualTo("signed-token");
         assertThat(response.role()).isEqualTo(UserRole.MEMBER);
@@ -62,7 +62,7 @@ class AuthServiceTest {
 
     @Test
     void shouldThrowInvalidCredentialsWhenClubAndDniCombinationDoesNotExist() {
-        LoginRequestDto request = new LoginRequestDto(CLUB_ID, DNI, RAW_PASSWORD);
+        LoginRequest request = new LoginRequest(CLUB_ID, DNI, RAW_PASSWORD);
         when(userAccountRepository.findByClubIdAndDni(CLUB_ID, DNI)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
@@ -73,7 +73,7 @@ class AuthServiceTest {
     @Test
     void shouldThrowInvalidCredentialsWhenPasswordDoesNotMatch() {
         UserAccount user = memberUser();
-        LoginRequestDto request = new LoginRequestDto(CLUB_ID, DNI, "wrong-password");
+        LoginRequest request = new LoginRequest(CLUB_ID, DNI, "wrong-password");
 
         when(userAccountRepository.findByClubIdAndDni(CLUB_ID, DNI)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong-password", HASHED_PASSWORD)).thenReturn(false);
@@ -85,7 +85,7 @@ class AuthServiceTest {
 
     @Test
     void shouldThrowInvalidCredentialsWhenSameDniBelongsToAnotherClub() {
-        LoginRequestDto request = new LoginRequestDto(99L, DNI, RAW_PASSWORD);
+        LoginRequest request = new LoginRequest(99L, DNI, RAW_PASSWORD);
         when(userAccountRepository.findByClubIdAndDni(99L, DNI)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);

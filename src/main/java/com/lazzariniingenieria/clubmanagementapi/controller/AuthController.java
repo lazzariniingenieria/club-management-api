@@ -1,7 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
-import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequestDto;
-import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponseDto;
+import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponse;
 import com.lazzariniingenieria.clubmanagementapi.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,8 +19,8 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponseDto> login(@Valid @RequestBody LoginRequestDto request) {
-        LoginResponseDto response = authService.login(request);
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        LoginResponse response = authService.login(request);
 
         return ResponseEntity.ok(response);
     }

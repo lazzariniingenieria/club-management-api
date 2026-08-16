@@ -8,8 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
-import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequestDto;
-import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponseDto;
+import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponse;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
@@ -43,8 +43,8 @@ class AuthControllerTest {
     @Test
     void shouldReturnTokenRoleAndMemberIdWhenCredentialsAreValid() throws Exception {
         String requestBody = readFixture("login-request-valid.json");
-        LoginResponseDto response = new LoginResponseDto("token-123", UserRole.MEMBER, 7L);
-        when(authService.login(any(LoginRequestDto.class))).thenReturn(response);
+        LoginResponse response = new LoginResponse("token-123", UserRole.MEMBER, 7L);
+        when(authService.login(any(LoginRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -78,7 +78,7 @@ class AuthControllerTest {
     @Test
     void shouldReturnUnauthorizedWhenCredentialsAreInvalid() throws Exception {
         String requestBody = readFixture("login-request-wrong-password.json");
-        when(authService.login(any(LoginRequestDto.class))).thenThrow(new InvalidCredentialsException());
+        when(authService.login(any(LoginRequest.class))).thenThrow(new InvalidCredentialsException());
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
