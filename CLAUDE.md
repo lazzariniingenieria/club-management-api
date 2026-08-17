@@ -14,7 +14,7 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 - Controller → Service → Repository. No business logic in the controller or the repository.
 - DTOs for everything that crosses the controller boundary. Never expose JPA entities directly.
 - MapStruct for entity ↔ DTO mapping. Lombok to reduce boilerplate (`@Getter`, `@Builder`, etc.) — avoid overusing `@Data` on JPA entities due to known `equals`/`hashCode`/`toString` issues with Hibernate proxies.
-- Multi-tenancy: every relevant entity carries `club_id`. Never omit the club filter in queries, even while the MVP only has one active club.
+- Multi-tenancy: `club_id` lives only on root tables — `club`, `family_group`, `member`, `user_account`, `court` — the ones a club creates directly. Leaf tables (`payment`, `court_block`, `recurring_slot`, `reservation`) don't repeat the column; they're already scoped to the right club through `member_id` or `court_id`. Never omit the club filter when querying a root table, even while the MVP only has one active club.
 
 ## Code rules
 - Everything in English: variable, method, and class names, DB columns, table names.
@@ -22,6 +22,7 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 - No comments except justified exceptions. Code should read on its own, through descriptive names.
 - Fully descriptive names, no cryptic abbreviations (`socioId` → `memberId`, not `mId`).
 - Always log important errors with enough context to debug without reproducing locally (SLF4J, appropriate level, never `e.printStackTrace()`).
+- Monetary amounts are always `NUMERIC`, never `FLOAT`/`DOUBLE` — precision loss on money is not acceptable.
 - Avoid chaining calls (`a.getB().getC().doSomething()`, stream pipelines with several links, fluent builders spread across one expression). Break each step into a descriptive, named variable instead — the variable name documents intent where the chain would hide it.
 - Always leave a blank line immediately before a `return` statement, unless it's the only statement in the method body.
 
@@ -39,12 +40,27 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 - Before deploying: run the full unit test suite locally (`mvnw clean verify`).
 
 ## Domain context
-Neighborhood club management system. Nine core tables: `club`, `family_group`, `member`, `user_account`, `payment`, `court`, `court_block`, `recurring_slot`, `reservation`.
+Neighborhood club management system, built for multi-club from day one. Nine core tables: `club`, `family_group`, `member`, `user_account`, `payment`, `court`, `court_block`, `recurring_slot`, `reservation`.
+
+Feature rollout: `club.courts_enabled` and `club.member_app_enabled` are boolean columns that gate the courts/booking stage and the member self-service app per club, without separate releases or redeploys. Code for a stage can be built and merged ahead of time behind its flag.
+
+Roles: `user_account.role` is one of `SUPER_ADMIN`, `ADMIN`, `MEMBER`.
+- `SUPER_ADMIN` represents the club itself — exactly one per club, seeded directly in the database when the club is created, `member_id` always null (`CHECK (role <> 'SUPER_ADMIN' OR member_id IS NULL)`, since it isn't a physical person). Only a `SUPER_ADMIN` can create `ADMIN` accounts for its own club; an `ADMIN` cannot create another `ADMIN` or a `SUPER_ADMIN`.
+- `ADMIN` may optionally carry a `member_id` if the admin is also a club member — same account, same session, for both admin actions and their own payments/bookings.
+- `dni` (not `national_id`) is the deliberate, team-chosen name for the national-ID field on `user_account`/`member` — "DNI" is the term everyone on this project actually uses, so it stays untranslated even though most other columns use full English names.
 
 Design decisions already validated — do not reopen without strong justification:
-- `user_account.member_id` nullable + `role` column: models an admin who is also a member without an extra table.
-- `family_group` + `payment.paid_by_member_id`: lets any family member pay another member's fee. A shared family-wide fee is explicitly out of scope.
-- `recurring_slot` unifies recurring member slots and club activities (classes) via a nullable `member_id` + `description`. Discriminator: `reservation.origin IN ('MEMBER','RECURRING','ACTIVITY')` — intentional Single Table Inheritance, not Class Table Inheritance (the added complexity isn't justified for this team size).
-- No scheduled jobs: reservation generation is atomic, one-shot, bounded by `valid_until` (maximum one year).
-- `court_block` is exclusively for non-recurring events (maintenance, etc.).
+- `user_account.member_id` nullable + `role` column: models an admin who is also a member without an extra table. The role is never derived from whether `member_id` is null — an admin-member needs `role='ADMIN'` and a `member_id` at the same time, which a derived role would make impossible.
+- `family_group` + `payment.paid_by_member_id`: lets any family member pay another member's fee. A shared family-wide fee is explicitly out of scope; a future discount is just a smaller `amount`, not a schema change.
+- `recurring_slot` unifies recurring member slots and club activities (classes) via a nullable `member_id` + `description`. Discriminator: `reservation.source IN ('MEMBER','RECURRING','ACTIVITY')` — intentional Single Table Inheritance, not Class Table Inheritance (the added complexity isn't justified for this team size).
+- Postgres `EXCLUDE USING gist` on `reservation` is the single source of truth for booking non-overlap, enforced at the database engine level, not only in application code. `court` deliberately has no "slot duration" column — it doesn't participate in any real validation.
+- No scheduled jobs: `recurring_slot` generation is atomic and one-shot, bounded by `valid_until` (maximum one year) — every occurrence is inserted in the same transaction that creates the slot, so a conflict is caught immediately instead of discovered later by a background job.
+- Multi-row operations that must be all-or-nothing (paying several months or several family members in one submission; generating every occurrence of a `recurring_slot`) run inside a single transaction.
+- `court_block` is exclusively for non-recurring events (maintenance, one-off events); anything recurring — member slots and club activities alike — lives in `recurring_slot` instead.
+- Login is DNI + password only, no external identity provider. `dni` is unique per club, not globally, so login must also ask which club the account belongs to. Password reset is a manual action by an `ADMIN` or `SUPER_ADMIN`, never a self-service email flow.
+- Delinquency status is never a stored column — it's computed by comparing `payment.period_covered` against the current date, so it can't drift out of sync.
 - `club` and the `club_id` FKs are kept even though the MVP has a single club: retrofitting multi-tenancy onto live production data is far more expensive than building it in from day one.
+
+NULL semantics: a nullable column here is never "missing data" — it's part of the record's meaning.
+- **Simple optional** (e.g. `member.phone`, `court.type`, `payment.paid_by_member_id`): free-standing, doesn't affect other columns.
+- **Exclusive pair**: a `CHECK` constraint requires at least one of two columns to be set (e.g. `recurring_slot.member_id` ⟺ `description`; `reservation.member_id` ⟺ `source = 'ACTIVITY'`). NULL here is one of two valid variants of the row, not an absence. The DB `CHECK` is the last line of defense — the real validation, with a user-facing error message, belongs in the Service layer.
