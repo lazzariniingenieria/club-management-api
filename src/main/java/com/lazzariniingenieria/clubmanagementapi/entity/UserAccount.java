@@ -52,6 +52,10 @@ public class UserAccount {
     @Column(name = "email", length = 150)
     private String email;
 
+    @Column(name = "active", nullable = false)
+    @Builder.Default
+    private boolean active = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 }

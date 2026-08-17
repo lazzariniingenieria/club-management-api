@@ -9,6 +9,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -81,6 +82,45 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleValidation(exception);
 
         assertThat(response.getBody().details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnConflictWithExceptionMessageWhenDniIsDuplicated() {
+        DuplicateDniException exception = new DuplicateDniException("30111222");
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleDuplicateDni(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.status()).isEqualTo(409);
+        assertThat(body.message()).isEqualTo("dni 30111222 is already in use in this club");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnNotFoundWithExceptionMessageWhenAdminDoesNotExist() {
+        AdminNotFoundException exception = new AdminNotFoundException(42L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleAdminNotFound(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body.status()).isEqualTo(404);
+        assertThat(body.message()).isEqualTo("Admin 42 not found");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnConflictWithGenericMessageWhenDatabaseConstraintIsViolated() {
+        DataIntegrityViolationException exception = new DataIntegrityViolationException("constraint violated");
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleDataIntegrityViolation(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.status()).isEqualTo(409);
+        assertThat(body.message()).isEqualTo("Request violates a database constraint");
+        assertThat(body.details()).isEmpty();
     }
 
     @Test
