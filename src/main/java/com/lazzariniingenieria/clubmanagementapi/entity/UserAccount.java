@@ -18,7 +18,7 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "user_account", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_user_account_club_national_id", columnNames = {"club_id", "national_id"}),
+        @UniqueConstraint(name = "uk_user_account_club_dni", columnNames = {"club_id", "dni"}),
         @UniqueConstraint(name = "uk_user_account_member_id", columnNames = {"member_id"})
 })
 @Getter
@@ -39,7 +39,7 @@ public class UserAccount {
     @Column(name = "member_id")
     private Long memberId;
 
-    @Column(name = "national_id", nullable = false, length = 20)
+    @Column(name = "dni", nullable = false, length = 20)
     private String dni;
 
     @Column(name = "password_hash", nullable = false, length = 255)
