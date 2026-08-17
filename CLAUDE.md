@@ -22,13 +22,15 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 - No comments except justified exceptions. Code should read on its own, through descriptive names.
 - Fully descriptive names, no cryptic abbreviations (`socioId` → `memberId`, not `mId`).
 - Always log important errors with enough context to debug without reproducing locally (SLF4J, appropriate level, never `e.printStackTrace()`).
-- `pom.xml`: always keep the latest stable versions of all dependencies.
+- Avoid chaining calls (`a.getB().getC().doSomething()`, stream pipelines with several links, fluent builders spread across one expression). Break each step into a descriptive, named variable instead — the variable name documents intent where the chain would hide it.
+- Always leave a blank line immediately before a `return` statement, unless it's the only statement in the method body.
 
 ## Testing
 - No Testcontainers and no local database in the test suite. Automated tests are unit-level: business logic tested with JUnit and Mockito, repositories and controllers tested against mocked collaborators, not a real database.
 - Any behavior that depends on actual Postgres semantics (constraints, discriminator checks, cascades) is verified manually against the Render environment after each deploy, not through an automated integration suite.
 - One test, one reason to fail. Descriptive test names (`shouldRejectReservationWhenCourtIsBlocked`, not `test1`).
 - Write quality tests for all non-trivial business logic.
+- Target 95% line coverage minimum. Coverage is a floor, not the goal — tests must be robust (real assertions on behavior and edge cases), never written just to move the number; padding coverage with trivial or assertion-free tests is worse than leaving it uncovered.
 
 ## Development workflow
 - **Localhost is used only to run tests.** The full API is never run locally against a persistent database.
