@@ -6,9 +6,9 @@ groups, payments, courts, recurring slots, activities, and bookings.
 ## Tech Stack
 
 - **Java** (latest LTS) + **Spring Boot** (latest stable)
-- **PostgreSQL**
+- **PostgreSQL**, schema managed with **Flyway**
 - **Lombok**, **MapStruct**
-- Hosted on **Render**
+- Hosted on **Railway** (production + test environments)
 
 ## Architecture
 
@@ -61,14 +61,20 @@ files drifting out of sync — read it before making changes.
 ## Getting Started
 
 Localhost is used only to run tests — the API is never run locally against a
-persistent database. The PostgreSQL database lives only on Render, and the
-API is deployed and tested there.
+persistent database. There are two hosted environments on Railway
+(production, deployed from `main`; test, deployed from `develop`), each with
+its own Postgres. Schema changes are Flyway migrations under
+`src/main/resources/db/migration`, applied automatically on boot.
 
 ```bash
 ./mvnw clean verify
 ```
 
-Runtime configuration (see `application.properties` / Render dashboard):
+Runtime configuration (see `application.properties` / Railway dashboard, set
+per environment):
 
-- `DATABASE_URL`
-- `SPRING_PROFILES_ACTIVE`
+- `SPRING_DATASOURCE_URL`
+- `SPRING_DATASOURCE_USERNAME`
+- `SPRING_DATASOURCE_PASSWORD`
+- `JWT_SECRET`
+- `JWT_EXPIRATION_MS`
