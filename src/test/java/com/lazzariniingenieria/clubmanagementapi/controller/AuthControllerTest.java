@@ -41,9 +41,9 @@ class AuthControllerTest {
     private JwtService jwtService;
 
     @Test
-    void shouldReturnTokenRoleAndMemberIdWhenCredentialsAreValid() throws Exception {
+    void shouldReturnTokenUserAccountIdRoleAndMemberIdWhenCredentialsAreValid() throws Exception {
         String requestBody = readFixture("login-request-valid.json");
-        LoginResponse response = new LoginResponse("token-123", UserRole.MEMBER, 7L);
+        LoginResponse response = new LoginResponse("token-123", 1L, UserRole.MEMBER, 7L);
         when(authService.login(any(LoginRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/auth/login")
@@ -51,6 +51,7 @@ class AuthControllerTest {
                         .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken", is("token-123")))
+                .andExpect(jsonPath("$.userAccountId", is(1)))
                 .andExpect(jsonPath("$.role", is("MEMBER")))
                 .andExpect(jsonPath("$.memberId", is(7)));
     }

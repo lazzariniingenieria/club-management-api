@@ -37,7 +37,7 @@ public class AuthService {
 
         String token = jwtService.generateToken(user);
 
-        return new LoginResponse(token, user.getRole(), user.getMemberId());
+        return new LoginResponse(token, user.getId(), user.getRole(), user.getMemberId());
     }
 
     private InvalidCredentialsException loginRejected(LoginRequest request) {

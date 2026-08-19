@@ -45,7 +45,7 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldReturnTokenRoleAndMemberIdWhenCredentialsAreValid() {
+    void shouldReturnTokenUserAccountIdRoleAndMemberIdWhenCredentialsAreValid() {
         UserAccount user = memberUser();
         LoginRequest request = new LoginRequest(CLUB_ID, DNI, RAW_PASSWORD);
 
@@ -56,6 +56,7 @@ class AuthServiceTest {
         LoginResponse response = authService.login(request);
 
         assertThat(response.accessToken()).isEqualTo("signed-token");
+        assertThat(response.userAccountId()).isEqualTo(1L);
         assertThat(response.role()).isEqualTo(UserRole.MEMBER);
         assertThat(response.memberId()).isEqualTo(7L);
     }
