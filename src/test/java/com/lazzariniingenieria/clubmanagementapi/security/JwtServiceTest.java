@@ -1,9 +1,11 @@
 package com.lazzariniingenieria.clubmanagementapi.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
+import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +32,6 @@ class JwtServiceTest {
 
         String token = jwtService.generateToken(user);
 
-        assertThat(jwtService.isTokenValid(token)).isTrue();
         AuthenticatedUser authenticatedUser = jwtService.extractAuthenticatedUser(token);
         assertThat(authenticatedUser.userAccountId()).isEqualTo(1L);
         assertThat(authenticatedUser.clubId()).isEqualTo(10L);
@@ -65,7 +66,7 @@ class JwtServiceTest {
         String token = jwtService.generateToken(user);
         String tamperedToken = token.substring(0, token.length() - 1) + (token.endsWith("A") ? "B" : "A");
 
-        assertThat(jwtService.isTokenValid(tamperedToken)).isFalse();
+        assertThatThrownBy(() -> jwtService.extractAuthenticatedUser(tamperedToken)).isInstanceOf(JwtException.class);
     }
 
     @Test
@@ -80,6 +81,6 @@ class JwtServiceTest {
         JwtService otherJwtService = new JwtService("a-completely-different-secret-key-32-bytes-min", 3_600_000L);
         String token = otherJwtService.generateToken(user);
 
-        assertThat(jwtService.isTokenValid(token)).isFalse();
+        assertThatThrownBy(() -> jwtService.extractAuthenticatedUser(token)).isInstanceOf(JwtException.class);
     }
 }

@@ -7,6 +7,7 @@ import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -21,6 +22,13 @@ public class GlobalExceptionHandler {
         log.warn("Login attempt rejected: {}", exception.getMessage());
 
         return buildResponse(HttpStatus.UNAUTHORIZED, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorDto> handleMalformedRequestBody(HttpMessageNotReadableException exception) {
+        log.warn("Rejected request with a malformed body: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.BAD_REQUEST, "Malformed request body", List.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

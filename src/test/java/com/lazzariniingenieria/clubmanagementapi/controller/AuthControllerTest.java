@@ -76,6 +76,14 @@ class AuthControllerTest {
     }
 
     @Test
+    void shouldReturnBadRequestWhenRequestBodyIsMalformedJson() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ not valid json"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void shouldReturnUnauthorizedWhenCredentialsAreInvalid() throws Exception {
         String requestBody = readFixture("login-request-wrong-password.json");
         when(authService.login(any(LoginRequest.class))).thenThrow(new InvalidCredentialsException());

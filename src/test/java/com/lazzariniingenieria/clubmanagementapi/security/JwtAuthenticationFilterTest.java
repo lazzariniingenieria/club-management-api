@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -72,7 +73,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void shouldNotAuthenticateWhenTokenIsInvalid() throws Exception {
         when(request.getHeader(AUTHORIZATION_HEADER)).thenReturn("Bearer " + TOKEN);
-        when(jwtService.isTokenValid(TOKEN)).thenReturn(false);
+        when(jwtService.extractAuthenticatedUser(TOKEN)).thenThrow(new JwtException("invalid token"));
 
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
 
@@ -85,7 +86,6 @@ class JwtAuthenticationFilterTest {
     void shouldAuthenticateWithRoleAuthorityWhenTokenIsValid() throws Exception {
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(1L, 10L, UserRole.ADMIN, 5L);
         when(request.getHeader(AUTHORIZATION_HEADER)).thenReturn("Bearer " + TOKEN);
-        when(jwtService.isTokenValid(TOKEN)).thenReturn(true);
         when(jwtService.extractAuthenticatedUser(TOKEN)).thenReturn(authenticatedUser);
 
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);

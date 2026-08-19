@@ -1,5 +1,6 @@
 package com.lazzariniingenieria.clubmanagementapi.security;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,14 +24,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                      FilterChain filterChain) throws ServletException, IOException {
         String token = extractToken(request);
-        boolean tokenPresentAndValid = token != null && jwtService.isTokenValid(token);
 
-        if (tokenPresentAndValid) {
-            AuthenticatedUser authenticatedUser = jwtService.extractAuthenticatedUser(token);
-            authenticate(authenticatedUser);
+        if (token != null) {
+            authenticateIfValid(token);
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void authenticateIfValid(String token) {
+        try {
+            AuthenticatedUser authenticatedUser = jwtService.extractAuthenticatedUser(token);
+            authenticate(authenticatedUser);
+        } catch (JwtException | IllegalArgumentException exception) {
+            // token invalid or expired - request continues unauthenticated, no logging: routine, not an error
+        }
     }
 
     private String extractToken(HttpServletRequest request) {
