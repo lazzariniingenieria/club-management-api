@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,6 +40,26 @@ class JwtServiceTest {
         assertThat(authenticatedUser.clubId()).isEqualTo(10L);
         assertThat(authenticatedUser.role()).isEqualTo(UserRole.ADMIN);
         assertThat(authenticatedUser.memberId()).isEqualTo(5L);
+    }
+
+    @Test
+    void shouldUseUserAccountIdAsSubjectInsteadOfDni() {
+        UserAccount user = UserAccount.builder()
+                .id(1L)
+                .clubId(10L)
+                .dni("30111222")
+                .role(UserRole.MEMBER)
+                .build();
+
+        String token = jwtService.generateToken(user);
+        String subject = Jwts.parser()
+                .verifyWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getSubject();
+
+        assertThat(subject).isEqualTo("1");
     }
 
     @Test

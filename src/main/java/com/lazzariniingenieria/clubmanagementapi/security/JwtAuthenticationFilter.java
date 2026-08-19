@@ -8,12 +8,14 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @RequiredArgsConstructor
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
@@ -37,7 +39,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             AuthenticatedUser authenticatedUser = jwtService.extractAuthenticatedUser(token);
             authenticate(authenticatedUser);
         } catch (JwtException | IllegalArgumentException exception) {
-            // token invalid or expired - request continues unauthenticated, no logging: routine, not an error
+            log.debug("Rejected request with an invalid or expired token: {}", exception.getMessage());
         }
     }
 
