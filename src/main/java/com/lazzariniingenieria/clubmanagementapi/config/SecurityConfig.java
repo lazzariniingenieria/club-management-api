@@ -32,6 +32,7 @@ public class SecurityConfig {
                 .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
         http.authorizeHttpRequests(authorize -> authorize
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                .requestMatchers("/api/admins/**").hasRole("SUPER_ADMIN")
                 .anyRequest().authenticated());
         http.addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
 

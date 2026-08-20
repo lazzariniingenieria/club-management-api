@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -29,6 +30,27 @@ public class GlobalExceptionHandler {
         log.warn("Rejected request with a malformed body: {}", exception.getMessage());
 
         return buildResponse(HttpStatus.BAD_REQUEST, "Malformed request body", List.of());
+    }
+
+    @ExceptionHandler(DuplicateDniException.class)
+    public ResponseEntity<ApiErrorDto> handleDuplicateDni(DuplicateDniException exception) {
+        log.warn("Rejected request due to duplicate dni: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(AdminNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handleAdminNotFound(AdminNotFoundException exception) {
+        log.warn("Admin lookup failed: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorDto> handleDataIntegrityViolation(DataIntegrityViolationException exception) {
+        log.warn("Rejected request due to a database constraint violation", exception);
+
+        return buildResponse(HttpStatus.CONFLICT, "Request violates a database constraint", List.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

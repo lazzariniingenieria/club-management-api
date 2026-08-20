@@ -92,6 +92,20 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
     }
 
+    @Test
+    void shouldThrowInvalidCredentialsWhenAccountIsInactive() {
+        UserAccount user = memberUser();
+        user.setActive(false);
+        LoginRequest request = new LoginRequest(CLUB_ID, DNI, RAW_PASSWORD);
+
+        when(userAccountRepository.findByClubIdAndDni(CLUB_ID, DNI)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches(RAW_PASSWORD, HASHED_PASSWORD)).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
+
+        verifyNoInteractions(jwtService);
+    }
+
     private UserAccount memberUser() {
         return UserAccount.builder()
                 .id(1L)

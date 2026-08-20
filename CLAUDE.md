@@ -25,6 +25,7 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 - Monetary amounts are always `NUMERIC`, never `FLOAT`/`DOUBLE` — precision loss on money is not acceptable.
 - Avoid chaining calls (`a.getB().getC().doSomething()`, stream pipelines with several links, fluent builders spread across one expression). Break each step into a descriptive, named variable instead — the variable name documents intent where the chain would hide it.
 - Always leave a blank line immediately before a `return` statement, unless it's the only statement in the method body.
+- Don't pre-validate every DB uniqueness/FK constraint in the service layer just because the DB enforces it. Only add a dedicated existence check + specific exception for conflicts a user will realistically cause and needs a clear message for (e.g. `dni` already taken by a typo). Rare edge cases (e.g. linking to a `member_id` already claimed by another `user_account`) can rely on the generic `DataIntegrityViolationException` → 409 handler instead — the DB still enforces the invariant, the code just doesn't pay for checking it twice.
 
 ## Testing
 - No Testcontainers and no local database in the test suite. Automated tests are unit-level: business logic tested with JUnit and Mockito, repositories and controllers tested against mocked collaborators, not a real database.
@@ -38,6 +39,7 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 - The PostgreSQL database lives only on Render.
 - The API is deployed on Render and always tested remotely — never `localhost:8080` as a manual testing environment.
 - Before deploying: run the full unit test suite locally (`mvnw clean verify`).
+- After finishing any task, the next step is always a self quality review of everything just changed, looking for improvements (bugs, missed edge cases, simplification, consistency with existing patterns) — not just confirming the build and tests pass.
 
 ## Domain context
 Neighborhood club management system, built for multi-club from day one. Nine core tables: `club`, `family_group`, `member`, `user_account`, `payment`, `court`, `court_block`, `recurring_slot`, `reservation`.
@@ -60,6 +62,7 @@ Design decisions already validated — do not reopen without strong justificatio
 - Login is DNI + password only, no external identity provider. `dni` is unique per club, not globally, so login must also ask which club the account belongs to. Password reset is a manual action by an `ADMIN` or `SUPER_ADMIN`, never a self-service email flow.
 - Delinquency status is never a stored column — it's computed by comparing `payment.period_covered` against the current date, so it can't drift out of sync.
 - `club` and the `club_id` FKs are kept even though the MVP has a single club: retrofitting multi-tenancy onto live production data is far more expensive than building it in from day one.
+- Deactivating a `user_account` ("dar de baja" an admin) is modeled as `active` (boolean, default `true`), never a row deletion — it preserves history and is reversible. Login must exclude inactive accounts (rejected the same way as wrong credentials, so an attacker can't distinguish the two cases).
 
 NULL semantics: a nullable column here is never "missing data" — it's part of the record's meaning.
 - **Simple optional** (e.g. `member.phone`, `court.type`, `payment.paid_by_member_id`): free-standing, doesn't affect other columns.

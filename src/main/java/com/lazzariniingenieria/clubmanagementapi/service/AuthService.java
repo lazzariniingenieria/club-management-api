@@ -35,6 +35,10 @@ public class AuthService {
             throw loginRejected(request);
         }
 
+        if (!user.isActive()) {
+            throw loginRejected(request);
+        }
+
         String token = jwtService.generateToken(user);
 
         return new LoginResponse(token, user.getId(), user.getRole(), user.getMemberId());
