@@ -31,44 +31,32 @@ src/main/java/.../
 ## Core Domain (current design)
 
 Nine tables: `club`, `family_group`, `member`, `user_account`, `payment`, `court`,
-`court_block`, `recurring_slot`, `reservation`.
+`court_block`, `recurring_slot`, `reservation`. Built multi-club from day one, even
+though only one club runs in production today.
 
-- Multi-tenant via `club_id` on all tenant-scoped tables.
-- `user_account.member_id` is nullable: an admin may or may not also be a member.
+- `club_id` lives only on root tables (`club`, `family_group`, `member`,
+  `user_account`, `court`); leaf tables are scoped indirectly through
+  `member_id`/`court_id`.
+- Feature rollout is per club: `club.courts_enabled` and
+  `club.member_app_enabled` gate the courts and member-app stages without a
+  separate release or redeploy.
+- Three roles on `user_account.role`: `SUPER_ADMIN` (represents the club
+  itself, one per club, seeded directly in the DB, never has a `member_id`),
+  `ADMIN` (optionally also a member, via a nullable `member_id`), and
+  `MEMBER`. Only a `SUPER_ADMIN` can create `ADMIN` accounts.
 - `recurring_slot` unifies recurring member slots and club activities (Single
-  Table Inheritance, discriminated by `reservation.origin IN ('MEMBER','RECURRING','ACTIVITY')`).
+  Table Inheritance, discriminated by `reservation.source IN ('MEMBER','RECURRING','ACTIVITY')`).
+- Booking non-overlap is enforced by a Postgres `EXCLUDE USING gist`
+  constraint on `reservation`, not just application code.
 - No scheduled jobs: slot/reservation generation is atomic and one-shot, bounded
   by a mandatory `valid_until` (max one year).
 
 ## Instructions for AI Assistants (Claude Code, Copilot, etc.)
 
-When writing or modifying code in this repository, follow these rules strictly:
-
-1. **Act as a senior backend developer (20+ years of experience).** Code must be
-   simple, high-quality, and scalable — never clever for the sake of being clever.
-2. **Functions are single-purpose.** Max ~20 lines and max 3 parameters, unless
-   there is a clearly justified exception (explain it if you make one).
-3. **Everything in English.** Variable names, method names, DB columns, table
-   names, DTOs — no Spanish anywhere in code, even though product/domain
-   discussions happen in Spanish.
-4. **No comments**, except to justify a genuinely non-obvious decision (e.g. a
-   workaround for a library bug). The code itself must be self-explanatory.
-5. **Code should read like a story.** Use full, descriptive names for
-   variables, methods, and classes. Prefer clarity over brevity.
-6. **Always write tests** for new logic where feasible — meaningful tests that
-   would catch a real regression, not tests for the sake of coverage.
-7. **Layering is mandatory:** controller → service → repository. Controllers
-   only orchestrate; business logic lives in services; DB access only in
-   repositories. Use DTOs at the controller boundary, MapStruct for mapping,
-   Lombok to remove boilerplate.
-8. **Always use the latest stable versions** of dependencies in `pom.xml`
-   unless there's a compatibility reason not to — state that reason if so.
-9. **Log important errors clearly**, with enough context to debug in
-   production (never swallow exceptions silently).
-10. Before implementing, if a request is ambiguous or introduces meaningful
-    complexity (e.g. a new scheduled job, a new nullable FK, a new table),
-    surface the trade-off instead of silently picking one — this team
-    validates design before writing code.
+**[CLAUDE.md](CLAUDE.md) is the authoritative, actively maintained source** for
+coding rules, architecture, testing standards, and validated domain decisions
+in this repository. It is not duplicated here on purpose, to avoid the two
+files drifting out of sync — read it before making changes.
 
 ## Getting Started
 
