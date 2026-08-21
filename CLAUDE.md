@@ -6,7 +6,8 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 ## Stack
 - Java 25 (LTS)
 - Spring Boot 4.1.x, Spring Framework 7.x
-- PostgreSQL (only on Render — never local, see Workflow section)
+- PostgreSQL (only on Railway — production and test environments, never local, see Workflow section)
+- Flyway for schema migrations (`src/main/resources/db/migration`)
 - Maven (always use the wrapper `mvnw` / `mvnw.cmd`, never a global Maven install)
 - Lombok, MapStruct
 
@@ -29,15 +30,16 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 
 ## Testing
 - No Testcontainers and no local database in the test suite. Automated tests are unit-level: business logic tested with JUnit and Mockito, repositories and controllers tested against mocked collaborators, not a real database.
-- Any behavior that depends on actual Postgres semantics (constraints, discriminator checks, cascades) is verified manually against the Render environment after each deploy, not through an automated integration suite.
+- Any behavior that depends on actual Postgres semantics (constraints, discriminator checks, cascades) is verified manually against the test environment after each deploy, not through an automated integration suite.
 - One test, one reason to fail. Descriptive test names (`shouldRejectReservationWhenCourtIsBlocked`, not `test1`).
 - Write quality tests for all non-trivial business logic.
 - Target 95% line coverage minimum. Coverage is a floor, not the goal — tests must be robust (real assertions on behavior and edge cases), never written just to move the number; padding coverage with trivial or assertion-free tests is worse than leaving it uncovered.
 
 ## Development workflow
 - **Localhost is used only to run tests.** The full API is never run locally against a persistent database.
-- The PostgreSQL database lives only on Render.
-- The API is deployed on Render and always tested remotely — never `localhost:8080` as a manual testing environment.
+- Two hosted environments on Railway, both Postgres-backed: **production** (deploys from `main`) and **test** (deploys from `develop`). No local Postgres, ever.
+- The API is always tested remotely against the test environment — never `localhost:8080` as a manual testing environment.
+- Schema changes are versioned Flyway migrations under `src/main/resources/db/migration` (`V1__..sql`, `V2__..sql`, ...), applied automatically on boot against whichever environment's database the running instance points to. Migrations are immutable once applied to any environment — fix a wrong one forward with a new migration, never edit or delete an applied one.
 - Before deploying: run the full unit test suite locally (`mvnw clean verify`).
 - After finishing any task, the next step is always a self quality review of everything just changed, looking for improvements (bugs, missed edge cases, simplification, consistency with existing patterns) — not just confirming the build and tests pass.
 
