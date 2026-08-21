@@ -106,6 +106,18 @@ class AdminControllerTest {
     }
 
     @Test
+    void shouldReturnBadRequestWhenEmailFormatIsInvalid() throws Exception {
+        String requestBody = readFixture("create-admin-request-invalid-email.json");
+
+        mockMvc.perform(post("/api/admins")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]", is("email: email must be a valid address")));
+    }
+
+    @Test
     void shouldReturnForbiddenWhenRequesterIsNotSuperAdmin() throws Exception {
         String requestBody = readFixture("create-admin-request-valid.json");
 
@@ -164,6 +176,17 @@ class AdminControllerTest {
                         .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(10)));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenUpdatingWithBlankDni() throws Exception {
+        String requestBody = readFixture("update-admin-request-blank-dni.json");
+
+        mockMvc.perform(patch("/api/admins/{adminId}", ADMIN_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -10,7 +10,6 @@ import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapper;
 import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,13 +50,8 @@ public class AdminService {
 
     public List<AdminResponse> listAdmins(Long clubId) {
         List<UserAccount> admins = userAccountRepository.findByClubIdAndRoleOrderByCreatedAtDesc(clubId, UserRole.ADMIN);
-        List<AdminResponse> responses = new ArrayList<>();
 
-        for (UserAccount admin : admins) {
-            responses.add(adminMapper.toResponse(admin));
-        }
-
-        return responses;
+        return adminMapper.toResponseList(admins);
     }
 
     public AdminResponse getAdmin(Long clubId, Long adminId) {
@@ -80,6 +74,7 @@ public class AdminService {
         admin.setMemberId(request.memberId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
+        log.info("Updated admin userAccountId={} for clubId={}", adminId, clubId);
 
         return adminMapper.toResponse(savedAdmin);
     }

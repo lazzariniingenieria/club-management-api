@@ -135,6 +135,22 @@ class AdminServiceTest {
     }
 
     @Test
+    void shouldUpdateAdminProfileWhenDniRemainsUnchanged() {
+        UserAccount existingAdmin = adminUser();
+        UpdateAdminRequest request = new UpdateAdminRequest(DNI, "updated@example.com", 12L);
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
+                .thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, DNI, ADMIN_ID)).thenReturn(false);
+        when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
+
+        AdminResponse response = adminService.updateAdmin(CLUB_ID, ADMIN_ID, request);
+
+        assertThat(response.dni()).isEqualTo(DNI);
+        assertThat(response.email()).isEqualTo("updated@example.com");
+        assertThat(response.memberId()).isEqualTo(12L);
+    }
+
+    @Test
     void shouldThrowDuplicateDniWhenUpdatingToDniUsedByAnotherAdmin() {
         UserAccount existingAdmin = adminUser();
         UpdateAdminRequest request = new UpdateAdminRequest("30999888", "new@example.com", 9L);
