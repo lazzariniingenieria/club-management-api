@@ -41,7 +41,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import(SecurityConfig.class)
 class AdminControllerTest {
 
-    private static final String FIXTURES_PATH = "fixtures/";
+    private static final String FIXTURES_PATH = "fixtures/admin/";
     private static final Long CLUB_ID = 1L;
     private static final Long ADMIN_ID = 10L;
 

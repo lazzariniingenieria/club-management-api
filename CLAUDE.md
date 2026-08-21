@@ -25,6 +25,7 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 - Always log important errors with enough context to debug without reproducing locally (SLF4J, appropriate level, never `e.printStackTrace()`).
 - Monetary amounts are always `NUMERIC`, never `FLOAT`/`DOUBLE` — precision loss on money is not acceptable.
 - Avoid chaining calls (`a.getB().getC().doSomething()`, stream pipelines with several links, fluent builders spread across one expression). Break each step into a descriptive, named variable instead — the variable name documents intent where the chain would hide it.
+- Line length up to 140 characters. Join a statement onto one line whenever it fits within that limit and was only split because of a narrower width (e.g. `when(...).thenReturn(...)`, `assertThatThrownBy(...).isInstanceOf(...)`, a method signature, an assignment). Don't collapse legitimate multi-line fluent chains this way — builders (`UserAccount.builder()...build()`), the `Jwts` parsing/signing chain, and `mockMvc.perform(...).andExpect(...)` test chains stay one step per line regardless of whether they'd fit on one line, because that's a deliberate readability convention, not a width constraint.
 - Always leave a blank line immediately before a `return` statement, unless it's the only statement in the method body.
 - Don't pre-validate every DB uniqueness/FK constraint in the service layer just because the DB enforces it. Only add a dedicated existence check + specific exception for conflicts a user will realistically cause and needs a clear message for (e.g. `dni` already taken by a typo). Rare edge cases (e.g. linking to a `member_id` already claimed by another `user_account`) can rely on the generic `DataIntegrityViolationException` → 409 handler instead — the DB still enforces the invariant, the code just doesn't pay for checking it twice.
 
@@ -32,6 +33,7 @@ Act as a senior Java/Spring developer with 20 years of experience. Code must be 
 - No Testcontainers and no local database in the test suite. Automated tests are unit-level: business logic tested with JUnit and Mockito, repositories and controllers tested against mocked collaborators, not a real database.
 - Any behavior that depends on actual Postgres semantics (constraints, discriminator checks, cascades) is verified manually against the test environment after each deploy, not through an automated integration suite.
 - One test, one reason to fail. Descriptive test names (`shouldRejectReservationWhenCourtIsBlocked`, not `test1`).
+- Group test resources (JSON fixtures, etc.) into subfolders by feature instead of leaving them flat in one directory — e.g. `src/test/resources/fixtures/admin/` for create/update-admin payloads, `fixtures/auth/` for login payloads. Add a new feature subfolder as soon as a second file for that feature exists.
 - Write quality tests for all non-trivial business logic.
 - Target 95% line coverage minimum. Coverage is a floor, not the goal — tests must be robust (real assertions on behavior and edge cases), never written just to move the number; padding coverage with trivial or assertion-free tests is worse than leaving it uncovered.
 

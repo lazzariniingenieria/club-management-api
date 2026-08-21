@@ -62,8 +62,7 @@ public class AdminService {
 
     public AdminResponse updateAdmin(Long clubId, Long adminId, UpdateAdminRequest request) {
         UserAccount admin = findAdminOrThrow(clubId, adminId);
-        boolean dniTakenByAnotherAccount =
-                userAccountRepository.existsByClubIdAndDniAndIdNot(clubId, request.dni(), adminId);
+        boolean dniTakenByAnotherAccount = userAccountRepository.existsByClubIdAndDniAndIdNot(clubId, request.dni(), adminId);
 
         if (dniTakenByAnotherAccount) {
             throw new DuplicateDniException(request.dni());
@@ -100,7 +99,8 @@ public class AdminService {
     }
 
     private UserAccount findAdminOrThrow(Long clubId, Long adminId) {
-        return userAccountRepository.findByIdAndClubIdAndRole(adminId, clubId, UserRole.ADMIN)
+        return userAccountRepository
+                .findByIdAndClubIdAndRole(adminId, clubId, UserRole.ADMIN)
                 .orElseThrow(() -> new AdminNotFoundException(adminId));
     }
 }
