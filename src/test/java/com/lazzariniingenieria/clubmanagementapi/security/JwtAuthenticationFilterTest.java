@@ -92,9 +92,7 @@ class JwtAuthenticationFilterTest {
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         assertThat(authentication.getPrincipal()).isEqualTo(authenticatedUser);
-        assertThat(authentication.getAuthorities())
-                .extracting("authority")
-                .containsExactly("ROLE_ADMIN");
+        assertThat(authentication.getAuthorities()).extracting("authority").containsExactly("ROLE_ADMIN");
         verify(filterChain).doFilter(request, response);
     }
 }

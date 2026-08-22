@@ -22,7 +22,7 @@ public class AuthService {
     private final JwtService jwtService;
 
     public LoginResponse login(LoginRequest request) {
-        Optional<UserAccount> userAccount = userAccountRepository.findByClubIdAndDni(request.clubId(),request.dni());
+        Optional<UserAccount> userAccount = userAccountRepository.findByClubIdAndDni(request.clubId(), request.dni());
 
         if (userAccount.isEmpty()) {
             throw loginRejected(request);

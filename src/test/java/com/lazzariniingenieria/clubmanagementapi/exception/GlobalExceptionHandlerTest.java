@@ -43,8 +43,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void shouldReturnBadRequestWhenRequestBodyIsMalformed() {
-        HttpMessageNotReadableException exception =
-                new HttpMessageNotReadableException("JSON parse error", mock(HttpInputMessage.class));
+        HttpMessageNotReadableException exception = new HttpMessageNotReadableException("JSON parse error", mock(HttpInputMessage.class));
 
         ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleMalformedRequestBody(exception);
         ApiErrorDto body = response.getBody();
@@ -61,8 +60,7 @@ class GlobalExceptionHandlerTest {
         FieldError clubIdError = new FieldError("loginRequest", "clubId", "must not be null");
         BindingResult bindingResult = mock(BindingResult.class);
         when(bindingResult.getFieldErrors()).thenReturn(List.of(dniError, clubIdError));
-        MethodArgumentNotValidException exception =
-                new MethodArgumentNotValidException(mock(MethodParameter.class), bindingResult);
+        MethodArgumentNotValidException exception = new MethodArgumentNotValidException(mock(MethodParameter.class), bindingResult);
 
         ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleValidation(exception);
         ApiErrorDto body = response.getBody();
@@ -76,8 +74,7 @@ class GlobalExceptionHandlerTest {
     void shouldReturnEmptyDetailsWhenValidationFailsWithNoFieldErrors() {
         BindingResult bindingResult = mock(BindingResult.class);
         when(bindingResult.getFieldErrors()).thenReturn(List.of());
-        MethodArgumentNotValidException exception =
-                new MethodArgumentNotValidException(mock(MethodParameter.class), bindingResult);
+        MethodArgumentNotValidException exception = new MethodArgumentNotValidException(mock(MethodParameter.class), bindingResult);
 
         ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleValidation(exception);
 

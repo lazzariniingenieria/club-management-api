@@ -29,7 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import(SecurityConfig.class)
 class AuthControllerTest {
 
-    private static final String FIXTURES_PATH = "fixtures/";
+    private static final String FIXTURES_PATH = "fixtures/auth/";
 
     @Autowired
     private MockMvc mockMvc;

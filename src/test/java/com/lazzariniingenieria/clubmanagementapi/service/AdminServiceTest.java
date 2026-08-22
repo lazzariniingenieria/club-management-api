@@ -82,16 +82,14 @@ class AdminServiceTest {
         CreateAdminRequest request = new CreateAdminRequest(DNI, RAW_PASSWORD, null, null);
         when(userAccountRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(true);
 
-        assertThatThrownBy(() -> adminService.createAdmin(CLUB_ID, request))
-                .isInstanceOf(DuplicateDniException.class);
+        assertThatThrownBy(() -> adminService.createAdmin(CLUB_ID, request)).isInstanceOf(DuplicateDniException.class);
 
         verify(userAccountRepository, never()).save(any());
     }
 
     @Test
     void shouldReturnAllAdminsForClub() {
-        when(userAccountRepository.findByClubIdAndRoleOrderByCreatedAtDesc(CLUB_ID, UserRole.ADMIN))
-                .thenReturn(List.of(adminUser()));
+        when(userAccountRepository.findByClubIdAndRoleOrderByCreatedAtDesc(CLUB_ID, UserRole.ADMIN)).thenReturn(List.of(adminUser()));
 
         List<AdminResponse> response = adminService.listAdmins(CLUB_ID);
 
@@ -101,8 +99,7 @@ class AdminServiceTest {
 
     @Test
     void shouldReturnAdminWhenFound() {
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.of(adminUser()));
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(adminUser()));
 
         AdminResponse response = adminService.getAdmin(CLUB_ID, ADMIN_ID);
 
@@ -111,19 +108,16 @@ class AdminServiceTest {
 
     @Test
     void shouldThrowAdminNotFoundWhenGettingMissingAdmin() {
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.empty());
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> adminService.getAdmin(CLUB_ID, ADMIN_ID))
-                .isInstanceOf(AdminNotFoundException.class);
+        assertThatThrownBy(() -> adminService.getAdmin(CLUB_ID, ADMIN_ID)).isInstanceOf(AdminNotFoundException.class);
     }
 
     @Test
     void shouldUpdateAdminProfileWhenDniIsAvailable() {
         UserAccount existingAdmin = adminUser();
         UpdateAdminRequest request = new UpdateAdminRequest("30999888", "new@example.com", 9L);
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, "30999888", ADMIN_ID)).thenReturn(false);
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
@@ -138,8 +132,7 @@ class AdminServiceTest {
     void shouldUpdateAdminProfileWhenDniRemainsUnchanged() {
         UserAccount existingAdmin = adminUser();
         UpdateAdminRequest request = new UpdateAdminRequest(DNI, "updated@example.com", 12L);
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, DNI, ADMIN_ID)).thenReturn(false);
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
@@ -154,12 +147,10 @@ class AdminServiceTest {
     void shouldThrowDuplicateDniWhenUpdatingToDniUsedByAnotherAdmin() {
         UserAccount existingAdmin = adminUser();
         UpdateAdminRequest request = new UpdateAdminRequest("30999888", "new@example.com", 9L);
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, "30999888", ADMIN_ID)).thenReturn(true);
 
-        assertThatThrownBy(() -> adminService.updateAdmin(CLUB_ID, ADMIN_ID, request))
-                .isInstanceOf(DuplicateDniException.class);
+        assertThatThrownBy(() -> adminService.updateAdmin(CLUB_ID, ADMIN_ID, request)).isInstanceOf(DuplicateDniException.class);
 
         verify(userAccountRepository, never()).save(any());
     }
@@ -167,18 +158,15 @@ class AdminServiceTest {
     @Test
     void shouldThrowAdminNotFoundWhenUpdatingMissingAdmin() {
         UpdateAdminRequest request = new UpdateAdminRequest("30999888", "new@example.com", 9L);
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.empty());
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> adminService.updateAdmin(CLUB_ID, ADMIN_ID, request))
-                .isInstanceOf(AdminNotFoundException.class);
+        assertThatThrownBy(() -> adminService.updateAdmin(CLUB_ID, ADMIN_ID, request)).isInstanceOf(AdminNotFoundException.class);
     }
 
     @Test
     void shouldDeactivateAdminWhenFound() {
         UserAccount existingAdmin = adminUser();
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
         AdminResponse response = adminService.deactivateAdmin(CLUB_ID, ADMIN_ID);
@@ -189,19 +177,16 @@ class AdminServiceTest {
 
     @Test
     void shouldThrowAdminNotFoundWhenDeactivatingMissingAdmin() {
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.empty());
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> adminService.deactivateAdmin(CLUB_ID, ADMIN_ID))
-                .isInstanceOf(AdminNotFoundException.class);
+        assertThatThrownBy(() -> adminService.deactivateAdmin(CLUB_ID, ADMIN_ID)).isInstanceOf(AdminNotFoundException.class);
     }
 
     @Test
     void shouldReactivateAdminWhenFound() {
         UserAccount existingAdmin = adminUser();
         existingAdmin.setActive(false);
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
         AdminResponse response = adminService.reactivateAdmin(CLUB_ID, ADMIN_ID);
@@ -212,11 +197,9 @@ class AdminServiceTest {
 
     @Test
     void shouldThrowAdminNotFoundWhenReactivatingMissingAdmin() {
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
-                .thenReturn(Optional.empty());
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> adminService.reactivateAdmin(CLUB_ID, ADMIN_ID))
-                .isInstanceOf(AdminNotFoundException.class);
+        assertThatThrownBy(() -> adminService.reactivateAdmin(CLUB_ID, ADMIN_ID)).isInstanceOf(AdminNotFoundException.class);
     }
 
     private UserAccount adminUser() {

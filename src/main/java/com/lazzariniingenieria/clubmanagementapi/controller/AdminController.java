@@ -42,8 +42,7 @@ public class AdminController {
     }
 
     @GetMapping("/{adminId}")
-    public ResponseEntity<AdminResponse> getOne(@AuthenticationPrincipal AuthenticatedUser currentUser,
-                                                 @PathVariable Long adminId) {
+    public ResponseEntity<AdminResponse> getOne(@AuthenticationPrincipal AuthenticatedUser currentUser, @PathVariable Long adminId) {
         AdminResponse response = adminService.getAdmin(currentUser.clubId(), adminId);
 
         return ResponseEntity.ok(response);
@@ -59,16 +58,14 @@ public class AdminController {
     }
 
     @PatchMapping("/{adminId}/deactivate")
-    public ResponseEntity<AdminResponse> deactivate(@AuthenticationPrincipal AuthenticatedUser currentUser,
-                                                      @PathVariable Long adminId) {
+    public ResponseEntity<AdminResponse> deactivate(@AuthenticationPrincipal AuthenticatedUser currentUser, @PathVariable Long adminId) {
         AdminResponse response = adminService.deactivateAdmin(currentUser.clubId(), adminId);
 
         return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/{adminId}/reactivate")
-    public ResponseEntity<AdminResponse> reactivate(@AuthenticationPrincipal AuthenticatedUser currentUser,
-                                                      @PathVariable Long adminId) {
+    public ResponseEntity<AdminResponse> reactivate(@AuthenticationPrincipal AuthenticatedUser currentUser, @PathVariable Long adminId) {
         AdminResponse response = adminService.reactivateAdmin(currentUser.clubId(), adminId);
 
         return ResponseEntity.ok(response);
