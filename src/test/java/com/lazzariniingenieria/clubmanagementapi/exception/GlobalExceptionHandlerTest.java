@@ -108,6 +108,19 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnNotFoundWithExceptionMessageWhenMemberDoesNotExist() {
+        MemberNotFoundException exception = new MemberNotFoundException(42L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleMemberNotFound(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body.status()).isEqualTo(404);
+        assertThat(body.message()).isEqualTo("Member 42 not found");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
     void shouldReturnConflictWithGenericMessageWhenDatabaseConstraintIsViolated() {
         DataIntegrityViolationException exception = new DataIntegrityViolationException("constraint violated");
 
