@@ -46,6 +46,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(MemberNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handleMemberNotFound(MemberNotFoundException exception) {
+        log.warn("Member lookup failed: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorDto> handleDataIntegrityViolation(DataIntegrityViolationException exception) {
         log.warn("Rejected request due to a database constraint violation", exception);
