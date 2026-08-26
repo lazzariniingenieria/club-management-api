@@ -1,5 +1,6 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
+import com.lazzariniingenieria.clubmanagementapi.dto.AssignFamilyGroupRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateMemberRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateMemberRequest;
@@ -67,6 +68,16 @@ public class MemberController {
     @PatchMapping("/{memberId}/reactivate")
     public ResponseEntity<MemberResponse> reactivate(@AuthenticationPrincipal AuthenticatedUser currentUser, @PathVariable Long memberId) {
         MemberResponse response = memberService.reactivateMember(currentUser.clubId(), memberId);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{memberId}/family-group")
+    public ResponseEntity<MemberResponse> assignFamilyGroup(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                              @PathVariable Long memberId,
+                                                              @Valid @RequestBody AssignFamilyGroupRequest request) {
+        Long familyGroupId = request.familyGroupId();
+        MemberResponse response = memberService.assignFamilyGroup(currentUser.clubId(), memberId, familyGroupId);
 
         return ResponseEntity.ok(response);
     }

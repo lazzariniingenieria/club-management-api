@@ -53,6 +53,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(FamilyGroupNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handleFamilyGroupNotFound(FamilyGroupNotFoundException exception) {
+        log.warn("Family group lookup failed: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorDto> handleDataIntegrityViolation(DataIntegrityViolationException exception) {
         log.warn("Rejected request due to a database constraint violation", exception);
