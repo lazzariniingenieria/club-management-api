@@ -33,7 +33,6 @@ public class MemberService {
 
         Member member = Member.builder()
                 .clubId(clubId)
-                .familyGroupId(request.familyGroupId())
                 .firstName(request.firstName())
                 .lastName(request.lastName())
                 .dni(request.dni())
@@ -75,7 +74,6 @@ public class MemberService {
         member.setDni(request.dni());
         member.setPhone(request.phone());
         member.setEmail(request.email());
-        member.setFamilyGroupId(request.familyGroupId());
 
         Member savedMember = memberRepository.save(member);
         log.info("Updated member memberId={} for clubId={}", memberId, clubId);

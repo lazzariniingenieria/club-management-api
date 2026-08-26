@@ -57,6 +57,8 @@ public class Member {
     @Column(name = "joined_at", nullable = false)
     private LocalDate joinedAt;
 
+    // ACTIVE/INACTIVE enum, not the boolean `active` UserAccount uses: this mirrors the technical spec's member
+    // schema as-is, which models status as a string enum to leave room for future values beyond a simple toggle.
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private MemberStatus status;

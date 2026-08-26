@@ -4,6 +4,8 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+// Deliberately separate from CreateMemberRequest: fields match today, but create and update are expected to diverge
+// as the member lifecycle grows (e.g. dni becoming immutable after creation), so they aren't meant to be merged.
 public record UpdateMemberRequest(@NotBlank(message = "firstName is required")
                                    @Size(max = 100, message = "firstName must be at most 100 characters")
                                    String firstName,
@@ -21,7 +23,5 @@ public record UpdateMemberRequest(@NotBlank(message = "firstName is required")
 
                                    @Email(message = "email must be a valid address")
                                    @Size(max = 150, message = "email must be at most 150 characters")
-                                   String email,
-
-                                   Long familyGroupId) {
+                                   String email) {
 }

@@ -52,7 +52,7 @@ class MemberServiceTest {
     @Test
     void shouldCreateMemberWhenDniIsNotTaken() {
         CreateMemberRequest request =
-                new CreateMemberRequest("Marcos", "Gomez", DNI, "+54 11 4444-5555", "marcos@example.com", 1L);
+                new CreateMemberRequest("Marcos", "Gomez", DNI, "+54 11 4444-5555", "marcos@example.com");
         when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(false);
         when(memberRepository.save(any(Member.class))).thenReturn(member());
 
@@ -65,16 +65,16 @@ class MemberServiceTest {
         assertThat(savedMember.getClubId()).isEqualTo(CLUB_ID);
         assertThat(savedMember.getStatus()).isEqualTo(MemberStatus.ACTIVE);
         assertThat(savedMember.getFirstName()).isEqualTo("Marcos");
+        assertThat(savedMember.getFamilyGroupId()).isNull();
         assertThat(response.id()).isEqualTo(MEMBER_ID);
         assertThat(response.dni()).isEqualTo(DNI);
         assertThat(response.email()).isEqualTo("marcos@example.com");
-        assertThat(response.familyGroupId()).isEqualTo(1L);
         assertThat(response.status()).isEqualTo(MemberStatus.ACTIVE);
     }
 
     @Test
     void shouldThrowDuplicateDniWhenCreatingWithDniAlreadyUsedInClub() {
-        CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", DNI, null, null, null);
+        CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", DNI, null, null);
         when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(true);
 
         assertThatThrownBy(() -> memberService.createMember(CLUB_ID, request)).isInstanceOf(DuplicateDniException.class);
@@ -112,7 +112,7 @@ class MemberServiceTest {
     void shouldUpdateMemberProfileWhenDniIsAvailable() {
         Member existingMember = member();
         UpdateMemberRequest request =
-                new UpdateMemberRequest("Marcos", "Gomez", "30999888", "+54 11 4444-5555", "new@example.com", 2L);
+                new UpdateMemberRequest("Marcos", "Gomez", "30999888", "+54 11 4444-5555", "new@example.com");
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, "30999888", MEMBER_ID)).thenReturn(false);
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
@@ -121,14 +121,14 @@ class MemberServiceTest {
 
         assertThat(response.dni()).isEqualTo("30999888");
         assertThat(response.email()).isEqualTo("new@example.com");
-        assertThat(response.familyGroupId()).isEqualTo(2L);
+        assertThat(response.familyGroupId()).isEqualTo(1L);
     }
 
     @Test
     void shouldUpdateMemberProfileWhenDniRemainsUnchanged() {
         Member existingMember = member();
         UpdateMemberRequest request =
-                new UpdateMemberRequest("Marcos", "Gomez", DNI, "+54 11 4444-5555", "updated@example.com", 3L);
+                new UpdateMemberRequest("Marcos", "Gomez", DNI, "+54 11 4444-5555", "updated@example.com");
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, DNI, MEMBER_ID)).thenReturn(false);
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
@@ -137,14 +137,14 @@ class MemberServiceTest {
 
         assertThat(response.dni()).isEqualTo(DNI);
         assertThat(response.email()).isEqualTo("updated@example.com");
-        assertThat(response.familyGroupId()).isEqualTo(3L);
+        assertThat(response.familyGroupId()).isEqualTo(1L);
     }
 
     @Test
     void shouldThrowDuplicateDniWhenUpdatingToDniUsedByAnotherMember() {
         Member existingMember = member();
         UpdateMemberRequest request =
-                new UpdateMemberRequest("Marcos", "Gomez", "30999888", "+54 11 4444-5555", "new@example.com", 2L);
+                new UpdateMemberRequest("Marcos", "Gomez", "30999888", "+54 11 4444-5555", "new@example.com");
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, "30999888", MEMBER_ID)).thenReturn(true);
 
@@ -157,7 +157,7 @@ class MemberServiceTest {
     @Test
     void shouldThrowMemberNotFoundWhenUpdatingMissingMember() {
         UpdateMemberRequest request =
-                new UpdateMemberRequest("Marcos", "Gomez", "30999888", "+54 11 4444-5555", "new@example.com", 2L);
+                new UpdateMemberRequest("Marcos", "Gomez", "30999888", "+54 11 4444-5555", "new@example.com");
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> memberService.updateMember(CLUB_ID, MEMBER_ID, request))

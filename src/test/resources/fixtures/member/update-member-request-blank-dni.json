@@ -3,6 +3,5 @@
   "lastName": "Gomez",
   "dni": "",
   "phone": "+54 11 4444-5555",
-  "email": "new@example.com",
-  "familyGroupId": 2
+  "email": "new@example.com"
 }
