@@ -4,3 +4,5 @@ CREATE TABLE family_group (
     name VARCHAR(150),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX idx_family_group_club_id ON family_group(club_id);

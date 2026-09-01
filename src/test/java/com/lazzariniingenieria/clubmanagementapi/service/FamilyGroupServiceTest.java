@@ -3,6 +3,7 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateFamilyGroupRequest;
@@ -19,6 +20,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -48,6 +50,13 @@ class FamilyGroupServiceTest {
 
         FamilyGroupResponse response = familyGroupService.createFamilyGroup(CLUB_ID, request);
 
+        ArgumentCaptor<FamilyGroup> savedFamilyGroupCaptor = ArgumentCaptor.forClass(FamilyGroup.class);
+        verify(familyGroupRepository).save(savedFamilyGroupCaptor.capture());
+        FamilyGroup savedFamilyGroup = savedFamilyGroupCaptor.getValue();
+
+        assertThat(savedFamilyGroup.getClubId()).isEqualTo(CLUB_ID);
+        assertThat(savedFamilyGroup.getName()).isEqualTo("Familia Gomez");
+        assertThat(savedFamilyGroup.getCreatedAt()).isNotNull();
         assertThat(response.id()).isEqualTo(FAMILY_GROUP_ID);
         assertThat(response.name()).isEqualTo("Familia Gomez");
     }

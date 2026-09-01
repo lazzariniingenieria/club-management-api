@@ -106,8 +106,9 @@ public class MemberService {
 
     public MemberResponse assignFamilyGroup(Long clubId, Long memberId, Long familyGroupId) {
         Member member = findMemberOrThrow(clubId, memberId);
+        boolean familyGroupExists = familyGroupRepository.existsByIdAndClubId(familyGroupId, clubId);
 
-        if (familyGroupId != null && !familyGroupRepository.existsByIdAndClubId(familyGroupId, clubId)) {
+        if (!familyGroupExists) {
             throw new FamilyGroupNotFoundException(familyGroupId);
         }
 
@@ -115,6 +116,16 @@ public class MemberService {
 
         Member savedMember = memberRepository.save(member);
         log.info("Assigned familyGroupId={} to member memberId={} for clubId={}", familyGroupId, memberId, clubId);
+
+        return memberMapper.toResponse(savedMember);
+    }
+
+    public MemberResponse unassignFamilyGroup(Long clubId, Long memberId) {
+        Member member = findMemberOrThrow(clubId, memberId);
+        member.setFamilyGroupId(null);
+
+        Member savedMember = memberRepository.save(member);
+        log.info("Unassigned family group from member memberId={} for clubId={}", memberId, clubId);
 
         return memberMapper.toResponse(savedMember);
     }

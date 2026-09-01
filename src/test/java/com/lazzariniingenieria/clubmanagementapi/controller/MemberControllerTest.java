@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -239,15 +240,14 @@ class MemberControllerTest {
     }
 
     @Test
-    void shouldUnassignFamilyGroupWhenFamilyGroupIdIsNull() throws Exception {
+    void shouldReturnBadRequestWhenAssigningFamilyGroupWithNullFamilyGroupId() throws Exception {
         String requestBody = readFixture("assign-family-group-request-null.json");
-        when(memberService.assignFamilyGroup(CLUB_ID, MEMBER_ID, null)).thenReturn(memberResponse());
 
         mockMvc.perform(patch("/api/members/{memberId}/family-group", MEMBER_ID)
                         .with(asSuperAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isOk());
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -260,6 +260,22 @@ class MemberControllerTest {
                         .with(asSuperAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldUnassignFamilyGroupWhenValid() throws Exception {
+        when(memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID)).thenReturn(memberResponse());
+
+        mockMvc.perform(delete("/api/members/{memberId}/family-group", MEMBER_ID).with(asSuperAdmin()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenUnassigningFamilyGroupFromMissingMember() throws Exception {
+        when(memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID)).thenThrow(new MemberNotFoundException(MEMBER_ID));
+
+        mockMvc.perform(delete("/api/members/{memberId}/family-group", MEMBER_ID).with(asSuperAdmin()))
                 .andExpect(status().isNotFound());
     }
 

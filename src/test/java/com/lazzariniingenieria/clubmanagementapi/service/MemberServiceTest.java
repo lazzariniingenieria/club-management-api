@@ -224,18 +224,6 @@ class MemberServiceTest {
     }
 
     @Test
-    void shouldUnassignFamilyGroupWhenFamilyGroupIdIsNull() {
-        Member existingMember = member();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
-        when(memberRepository.save(existingMember)).thenReturn(existingMember);
-
-        MemberResponse response = memberService.assignFamilyGroup(CLUB_ID, MEMBER_ID, null);
-
-        assertThat(existingMember.getFamilyGroupId()).isNull();
-        assertThat(response.familyGroupId()).isNull();
-    }
-
-    @Test
     void shouldThrowFamilyGroupNotFoundWhenAssigningMissingFamilyGroup() {
         Member existingMember = member();
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
@@ -252,6 +240,26 @@ class MemberServiceTest {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> memberService.assignFamilyGroup(CLUB_ID, MEMBER_ID, 2L))
+                .isInstanceOf(MemberNotFoundException.class);
+    }
+
+    @Test
+    void shouldUnassignFamilyGroupWhenFound() {
+        Member existingMember = member();
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        MemberResponse response = memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID);
+
+        assertThat(existingMember.getFamilyGroupId()).isNull();
+        assertThat(response.familyGroupId()).isNull();
+    }
+
+    @Test
+    void shouldThrowMemberNotFoundWhenUnassigningFamilyGroupFromMissingMember() {
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID))
                 .isInstanceOf(MemberNotFoundException.class);
     }
 
