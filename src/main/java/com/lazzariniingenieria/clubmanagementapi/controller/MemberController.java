@@ -1,5 +1,6 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
+import com.lazzariniingenieria.clubmanagementapi.dto.AssignFamilyGroupRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateMemberRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateMemberRequest;
@@ -11,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -67,6 +69,24 @@ public class MemberController {
     @PatchMapping("/{memberId}/reactivate")
     public ResponseEntity<MemberResponse> reactivate(@AuthenticationPrincipal AuthenticatedUser currentUser, @PathVariable Long memberId) {
         MemberResponse response = memberService.reactivateMember(currentUser.clubId(), memberId);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{memberId}/family-group")
+    public ResponseEntity<MemberResponse> assignFamilyGroup(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                              @PathVariable Long memberId,
+                                                              @Valid @RequestBody AssignFamilyGroupRequest request) {
+        Long familyGroupId = request.familyGroupId();
+        MemberResponse response = memberService.assignFamilyGroup(currentUser.clubId(), memberId, familyGroupId);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{memberId}/family-group")
+    public ResponseEntity<MemberResponse> unassignFamilyGroup(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                                @PathVariable Long memberId) {
+        MemberResponse response = memberService.unassignFamilyGroup(currentUser.clubId(), memberId);
 
         return ResponseEntity.ok(response);
     }

@@ -13,9 +13,11 @@ import com.lazzariniingenieria.clubmanagementapi.dto.UpdateMemberRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.MemberMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.MemberMapperImpl;
+import com.lazzariniingenieria.clubmanagementapi.repository.FamilyGroupRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -40,13 +42,16 @@ class MemberServiceTest {
     @Mock
     private MemberRepository memberRepository;
 
+    @Mock
+    private FamilyGroupRepository familyGroupRepository;
+
     private final MemberMapper memberMapper = new MemberMapperImpl();
 
     private MemberService memberService;
 
     @BeforeEach
     void setUp() {
-        memberService = new MemberService(memberRepository, memberMapper);
+        memberService = new MemberService(memberRepository, memberMapper, familyGroupRepository);
     }
 
     @Test
@@ -202,6 +207,59 @@ class MemberServiceTest {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> memberService.reactivateMember(CLUB_ID, MEMBER_ID))
+                .isInstanceOf(MemberNotFoundException.class);
+    }
+
+    @Test
+    void shouldAssignFamilyGroupWhenItExistsInTheSameClub() {
+        Member existingMember = member();
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(familyGroupRepository.existsByIdAndClubId(2L, CLUB_ID)).thenReturn(true);
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        MemberResponse response = memberService.assignFamilyGroup(CLUB_ID, MEMBER_ID, 2L);
+
+        assertThat(existingMember.getFamilyGroupId()).isEqualTo(2L);
+        assertThat(response.familyGroupId()).isEqualTo(2L);
+    }
+
+    @Test
+    void shouldThrowFamilyGroupNotFoundWhenAssigningMissingFamilyGroup() {
+        Member existingMember = member();
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(familyGroupRepository.existsByIdAndClubId(2L, CLUB_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> memberService.assignFamilyGroup(CLUB_ID, MEMBER_ID, 2L))
+                .isInstanceOf(FamilyGroupNotFoundException.class);
+
+        verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrowMemberNotFoundWhenAssigningFamilyGroupToMissingMember() {
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> memberService.assignFamilyGroup(CLUB_ID, MEMBER_ID, 2L))
+                .isInstanceOf(MemberNotFoundException.class);
+    }
+
+    @Test
+    void shouldUnassignFamilyGroupWhenFound() {
+        Member existingMember = member();
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        MemberResponse response = memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID);
+
+        assertThat(existingMember.getFamilyGroupId()).isNull();
+        assertThat(response.familyGroupId()).isNull();
+    }
+
+    @Test
+    void shouldThrowMemberNotFoundWhenUnassigningFamilyGroupFromMissingMember() {
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID))
                 .isInstanceOf(MemberNotFoundException.class);
     }
 

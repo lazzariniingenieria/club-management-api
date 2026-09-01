@@ -121,6 +121,19 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnNotFoundWithExceptionMessageWhenFamilyGroupDoesNotExist() {
+        FamilyGroupNotFoundException exception = new FamilyGroupNotFoundException(42L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleFamilyGroupNotFound(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body.status()).isEqualTo(404);
+        assertThat(body.message()).isEqualTo("Family group 42 not found");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
     void shouldReturnConflictWithGenericMessageWhenDatabaseConstraintIsViolated() {
         DataIntegrityViolationException exception = new DataIntegrityViolationException("constraint violated");
 

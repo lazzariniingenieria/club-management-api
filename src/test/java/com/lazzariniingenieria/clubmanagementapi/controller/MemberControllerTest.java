@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,6 +19,7 @@ import com.lazzariniingenieria.clubmanagementapi.dto.UpdateMemberRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
@@ -222,6 +224,59 @@ class MemberControllerTest {
         mockMvc.perform(patch("/api/members/{memberId}/reactivate", MEMBER_ID).with(asSuperAdmin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status", is("ACTIVE")));
+    }
+
+    @Test
+    void shouldAssignFamilyGroupWhenValid() throws Exception {
+        String requestBody = readFixture("assign-family-group-request-valid.json");
+        when(memberService.assignFamilyGroup(eq(CLUB_ID), eq(MEMBER_ID), eq(2L))).thenReturn(memberResponse());
+
+        mockMvc.perform(patch("/api/members/{memberId}/family-group", MEMBER_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(10)));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenAssigningFamilyGroupWithNullFamilyGroupId() throws Exception {
+        String requestBody = readFixture("assign-family-group-request-null.json");
+
+        mockMvc.perform(patch("/api/members/{memberId}/family-group", MEMBER_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenAssigningMissingFamilyGroup() throws Exception {
+        String requestBody = readFixture("assign-family-group-request-valid.json");
+        when(memberService.assignFamilyGroup(eq(CLUB_ID), eq(MEMBER_ID), eq(2L)))
+                .thenThrow(new FamilyGroupNotFoundException(2L));
+
+        mockMvc.perform(patch("/api/members/{memberId}/family-group", MEMBER_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldUnassignFamilyGroupWhenValid() throws Exception {
+        when(memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID)).thenReturn(memberResponse());
+
+        mockMvc.perform(delete("/api/members/{memberId}/family-group", MEMBER_ID).with(asSuperAdmin()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenUnassigningFamilyGroupFromMissingMember() throws Exception {
+        when(memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID)).thenThrow(new MemberNotFoundException(MEMBER_ID));
+
+        mockMvc.perform(delete("/api/members/{memberId}/family-group", MEMBER_ID).with(asSuperAdmin()))
+                .andExpect(status().isNotFound());
     }
 
     private MemberResponse memberResponse() {

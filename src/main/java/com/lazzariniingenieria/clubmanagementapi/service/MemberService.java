@@ -6,8 +6,10 @@ import com.lazzariniingenieria.clubmanagementapi.dto.UpdateMemberRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.MemberMapper;
+import com.lazzariniingenieria.clubmanagementapi.repository.FamilyGroupRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -23,6 +25,7 @@ public class MemberService {
 
     private final MemberRepository memberRepository;
     private final MemberMapper memberMapper;
+    private final FamilyGroupRepository familyGroupRepository;
 
     public MemberResponse createMember(Long clubId, CreateMemberRequest request) {
         boolean dniInUse = memberRepository.existsByClubIdAndDni(clubId, request.dni());
@@ -97,6 +100,32 @@ public class MemberService {
 
         Member savedMember = memberRepository.save(member);
         log.info("Reactivated member memberId={} for clubId={}", memberId, clubId);
+
+        return memberMapper.toResponse(savedMember);
+    }
+
+    public MemberResponse assignFamilyGroup(Long clubId, Long memberId, Long familyGroupId) {
+        Member member = findMemberOrThrow(clubId, memberId);
+        boolean familyGroupExists = familyGroupRepository.existsByIdAndClubId(familyGroupId, clubId);
+
+        if (!familyGroupExists) {
+            throw new FamilyGroupNotFoundException(familyGroupId);
+        }
+
+        member.setFamilyGroupId(familyGroupId);
+
+        Member savedMember = memberRepository.save(member);
+        log.info("Assigned familyGroupId={} to member memberId={} for clubId={}", familyGroupId, memberId, clubId);
+
+        return memberMapper.toResponse(savedMember);
+    }
+
+    public MemberResponse unassignFamilyGroup(Long clubId, Long memberId) {
+        Member member = findMemberOrThrow(clubId, memberId);
+        member.setFamilyGroupId(null);
+
+        Member savedMember = memberRepository.save(member);
+        log.info("Unassigned family group from member memberId={} for clubId={}", memberId, clubId);
 
         return memberMapper.toResponse(savedMember);
     }
