@@ -7,6 +7,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.FamilyGroup;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.FamilyGroupMapper;
 import com.lazzariniingenieria.clubmanagementapi.repository.FamilyGroupRepository;
+import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -21,11 +22,16 @@ public class FamilyGroupService {
     private final FamilyGroupRepository familyGroupRepository;
     private final FamilyGroupMapper familyGroupMapper;
 
-    public FamilyGroupResponse createFamilyGroup(Long clubId, CreateFamilyGroupRequest request) {
+    public FamilyGroupResponse createFamilyGroup(AuthenticatedUser currentUser, CreateFamilyGroupRequest request) {
+        Long clubId = currentUser.clubId();
+        Instant now = Instant.now();
         FamilyGroup familyGroup = FamilyGroup.builder()
                 .clubId(clubId)
                 .name(request.name())
-                .createdAt(Instant.now())
+                .createdAt(now)
+                .updatedAt(now)
+                .createdByUserId(currentUser.userAccountId())
+                .updatedByUserId(currentUser.userAccountId())
                 .build();
 
         FamilyGroup savedFamilyGroup = familyGroupRepository.save(familyGroup);
@@ -46,9 +52,12 @@ public class FamilyGroupService {
         return familyGroupMapper.toResponse(familyGroup);
     }
 
-    public FamilyGroupResponse updateFamilyGroup(Long clubId, Long familyGroupId, UpdateFamilyGroupRequest request) {
+    public FamilyGroupResponse updateFamilyGroup(AuthenticatedUser currentUser, Long familyGroupId, UpdateFamilyGroupRequest request) {
+        Long clubId = currentUser.clubId();
         FamilyGroup familyGroup = findFamilyGroupOrThrow(clubId, familyGroupId);
         familyGroup.setName(request.name());
+        familyGroup.setUpdatedAt(Instant.now());
+        familyGroup.setUpdatedByUserId(currentUser.userAccountId());
 
         FamilyGroup savedFamilyGroup = familyGroupRepository.save(familyGroup);
         log.info("Updated family group familyGroupId={} for clubId={}", familyGroupId, clubId);

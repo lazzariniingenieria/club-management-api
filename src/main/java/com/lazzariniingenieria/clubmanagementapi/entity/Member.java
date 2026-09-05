@@ -65,4 +65,13 @@ public class Member {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    @Column(name = "created_by_user_id", updatable = false)
+    private Long createdByUserId;
+
+    @Column(name = "updated_by_user_id")
+    private Long updatedByUserId;
 }
