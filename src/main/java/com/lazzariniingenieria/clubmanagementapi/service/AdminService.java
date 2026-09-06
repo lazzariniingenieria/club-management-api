@@ -9,6 +9,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundExceptio
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapper;
 import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
+import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -25,13 +26,15 @@ public class AdminService {
     private final PasswordEncoder passwordEncoder;
     private final AdminMapper adminMapper;
 
-    public AdminResponse createAdmin(Long clubId, CreateAdminRequest request) {
+    public AdminResponse createAdmin(AuthenticatedUser currentUser, CreateAdminRequest request) {
+        Long clubId = currentUser.clubId();
         boolean dniInUse = userAccountRepository.existsByClubIdAndDni(clubId, request.dni());
 
         if (dniInUse) {
             throw new DuplicateDniException(request.dni());
         }
 
+        Instant now = Instant.now();
         UserAccount admin = UserAccount.builder()
                 .clubId(clubId)
                 .dni(request.dni())
@@ -39,7 +42,10 @@ public class AdminService {
                 .role(UserRole.ADMIN)
                 .email(request.email())
                 .memberId(request.memberId())
-                .createdAt(Instant.now())
+                .createdAt(now)
+                .updatedAt(now)
+                .createdByUserId(currentUser.userAccountId())
+                .updatedByUserId(currentUser.userAccountId())
                 .build();
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
@@ -60,7 +66,8 @@ public class AdminService {
         return adminMapper.toResponse(admin);
     }
 
-    public AdminResponse updateAdmin(Long clubId, Long adminId, UpdateAdminRequest request) {
+    public AdminResponse updateAdmin(AuthenticatedUser currentUser, Long adminId, UpdateAdminRequest request) {
+        Long clubId = currentUser.clubId();
         UserAccount admin = findAdminOrThrow(clubId, adminId);
         boolean dniTakenByAnotherAccount = userAccountRepository.existsByClubIdAndDniAndIdNot(clubId, request.dni(), adminId);
 
@@ -71,6 +78,7 @@ public class AdminService {
         admin.setDni(request.dni());
         admin.setEmail(request.email());
         admin.setMemberId(request.memberId());
+        markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
         log.info("Updated admin userAccountId={} for clubId={}", adminId, clubId);
@@ -78,9 +86,11 @@ public class AdminService {
         return adminMapper.toResponse(savedAdmin);
     }
 
-    public AdminResponse deactivateAdmin(Long clubId, Long adminId) {
+    public AdminResponse deactivateAdmin(AuthenticatedUser currentUser, Long adminId) {
+        Long clubId = currentUser.clubId();
         UserAccount admin = findAdminOrThrow(clubId, adminId);
         admin.setActive(false);
+        markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
         log.info("Deactivated admin userAccountId={} for clubId={}", adminId, clubId);
@@ -88,14 +98,21 @@ public class AdminService {
         return adminMapper.toResponse(savedAdmin);
     }
 
-    public AdminResponse reactivateAdmin(Long clubId, Long adminId) {
+    public AdminResponse reactivateAdmin(AuthenticatedUser currentUser, Long adminId) {
+        Long clubId = currentUser.clubId();
         UserAccount admin = findAdminOrThrow(clubId, adminId);
         admin.setActive(true);
+        markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
         log.info("Reactivated admin userAccountId={} for clubId={}", adminId, clubId);
 
         return adminMapper.toResponse(savedAdmin);
+    }
+
+    private void markUpdated(UserAccount admin, Long actingUserId) {
+        admin.setUpdatedAt(Instant.now());
+        admin.setUpdatedByUserId(actingUserId);
     }
 
     private UserAccount findAdminOrThrow(Long clubId, Long adminId) {

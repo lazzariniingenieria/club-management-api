@@ -56,7 +56,7 @@ class FamilyGroupControllerTest {
     @Test
     void shouldReturnCreatedFamilyGroupWhenRequesterIsSuperAdmin() throws Exception {
         String requestBody = readFixture("create-family-group-request-valid.json");
-        when(familyGroupService.createFamilyGroup(eq(CLUB_ID), any(CreateFamilyGroupRequest.class)))
+        when(familyGroupService.createFamilyGroup(any(AuthenticatedUser.class), any(CreateFamilyGroupRequest.class)))
                 .thenReturn(familyGroupResponse());
 
         mockMvc.perform(post("/api/family-groups")
@@ -71,7 +71,7 @@ class FamilyGroupControllerTest {
     @Test
     void shouldReturnCreatedFamilyGroupWhenRequesterIsAdmin() throws Exception {
         String requestBody = readFixture("create-family-group-request-valid.json");
-        when(familyGroupService.createFamilyGroup(eq(CLUB_ID), any(CreateFamilyGroupRequest.class)))
+        when(familyGroupService.createFamilyGroup(any(AuthenticatedUser.class), any(CreateFamilyGroupRequest.class)))
                 .thenReturn(familyGroupResponse());
 
         mockMvc.perform(post("/api/family-groups")
@@ -143,7 +143,7 @@ class FamilyGroupControllerTest {
     @Test
     void shouldUpdateFamilyGroupWhenValid() throws Exception {
         String requestBody = readFixture("update-family-group-request-valid.json");
-        when(familyGroupService.updateFamilyGroup(eq(CLUB_ID), eq(FAMILY_GROUP_ID), any(UpdateFamilyGroupRequest.class)))
+        when(familyGroupService.updateFamilyGroup(any(AuthenticatedUser.class), eq(FAMILY_GROUP_ID), any(UpdateFamilyGroupRequest.class)))
                 .thenReturn(familyGroupResponse());
 
         mockMvc.perform(patch("/api/family-groups/{familyGroupId}", FAMILY_GROUP_ID)
@@ -166,7 +166,8 @@ class FamilyGroupControllerTest {
     }
 
     private FamilyGroupResponse familyGroupResponse() {
-        return new FamilyGroupResponse(FAMILY_GROUP_ID, "Familia Gomez", Instant.parse("2026-01-01T00:00:00Z"));
+        return new FamilyGroupResponse(FAMILY_GROUP_ID, "Familia Gomez", Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2026-01-01T00:00:00Z"), 1L, 1L);
     }
 
     private RequestPostProcessor asSuperAdmin() {

@@ -62,7 +62,7 @@ class MemberControllerTest {
     void shouldReturnCreatedMemberWhenRequesterIsSuperAdmin() throws Exception {
         String requestBody = readFixture("create-member-request-valid.json");
         MemberResponse response = memberResponse();
-        when(memberService.createMember(eq(CLUB_ID), any(CreateMemberRequest.class))).thenReturn(response);
+        when(memberService.createMember(any(AuthenticatedUser.class), any(CreateMemberRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/members")
                         .with(asSuperAdmin())
@@ -77,7 +77,7 @@ class MemberControllerTest {
     @Test
     void shouldReturnCreatedMemberWhenRequesterIsAdmin() throws Exception {
         String requestBody = readFixture("create-member-request-valid.json");
-        when(memberService.createMember(eq(CLUB_ID), any(CreateMemberRequest.class))).thenReturn(memberResponse());
+        when(memberService.createMember(any(AuthenticatedUser.class), any(CreateMemberRequest.class))).thenReturn(memberResponse());
 
         mockMvc.perform(post("/api/members")
                         .with(asAdmin())
@@ -89,7 +89,7 @@ class MemberControllerTest {
     @Test
     void shouldReturnConflictWhenCreatingMemberWithDuplicateDni() throws Exception {
         String requestBody = readFixture("create-member-request-valid.json");
-        when(memberService.createMember(eq(CLUB_ID), any(CreateMemberRequest.class)))
+        when(memberService.createMember(any(AuthenticatedUser.class), any(CreateMemberRequest.class)))
                 .thenThrow(new DuplicateDniException("30111222"));
 
         mockMvc.perform(post("/api/members")
@@ -183,7 +183,7 @@ class MemberControllerTest {
     @Test
     void shouldUpdateMemberWhenValid() throws Exception {
         String requestBody = readFixture("update-member-request-valid.json");
-        when(memberService.updateMember(eq(CLUB_ID), eq(MEMBER_ID), any(UpdateMemberRequest.class)))
+        when(memberService.updateMember(any(AuthenticatedUser.class), eq(MEMBER_ID), any(UpdateMemberRequest.class)))
                 .thenReturn(memberResponse());
 
         mockMvc.perform(patch("/api/members/{memberId}", MEMBER_ID)
@@ -209,8 +209,8 @@ class MemberControllerTest {
     void shouldDeactivateMember() throws Exception {
         MemberResponse deactivated = new MemberResponse(MEMBER_ID, "Marcos", "Gomez", "30111222", "+54 11 4444-5555",
                 "marcos@example.com", 1L, LocalDate.parse("2026-01-01"), MemberStatus.INACTIVE,
-                Instant.parse("2026-01-01T00:00:00Z"));
-        when(memberService.deactivateMember(CLUB_ID, MEMBER_ID)).thenReturn(deactivated);
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-02T00:00:00Z"), 1L, 1L);
+        when(memberService.deactivateMember(any(AuthenticatedUser.class), eq(MEMBER_ID))).thenReturn(deactivated);
 
         mockMvc.perform(patch("/api/members/{memberId}/deactivate", MEMBER_ID).with(asSuperAdmin()))
                 .andExpect(status().isOk())
@@ -219,7 +219,7 @@ class MemberControllerTest {
 
     @Test
     void shouldReactivateMember() throws Exception {
-        when(memberService.reactivateMember(CLUB_ID, MEMBER_ID)).thenReturn(memberResponse());
+        when(memberService.reactivateMember(any(AuthenticatedUser.class), eq(MEMBER_ID))).thenReturn(memberResponse());
 
         mockMvc.perform(patch("/api/members/{memberId}/reactivate", MEMBER_ID).with(asSuperAdmin()))
                 .andExpect(status().isOk())
@@ -229,7 +229,7 @@ class MemberControllerTest {
     @Test
     void shouldAssignFamilyGroupWhenValid() throws Exception {
         String requestBody = readFixture("assign-family-group-request-valid.json");
-        when(memberService.assignFamilyGroup(eq(CLUB_ID), eq(MEMBER_ID), eq(2L))).thenReturn(memberResponse());
+        when(memberService.assignFamilyGroup(any(AuthenticatedUser.class), eq(MEMBER_ID), eq(2L))).thenReturn(memberResponse());
 
         mockMvc.perform(patch("/api/members/{memberId}/family-group", MEMBER_ID)
                         .with(asSuperAdmin())
@@ -253,7 +253,7 @@ class MemberControllerTest {
     @Test
     void shouldReturnNotFoundWhenAssigningMissingFamilyGroup() throws Exception {
         String requestBody = readFixture("assign-family-group-request-valid.json");
-        when(memberService.assignFamilyGroup(eq(CLUB_ID), eq(MEMBER_ID), eq(2L)))
+        when(memberService.assignFamilyGroup(any(AuthenticatedUser.class), eq(MEMBER_ID), eq(2L)))
                 .thenThrow(new FamilyGroupNotFoundException(2L));
 
         mockMvc.perform(patch("/api/members/{memberId}/family-group", MEMBER_ID)
@@ -265,7 +265,7 @@ class MemberControllerTest {
 
     @Test
     void shouldUnassignFamilyGroupWhenValid() throws Exception {
-        when(memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID)).thenReturn(memberResponse());
+        when(memberService.unassignFamilyGroup(any(AuthenticatedUser.class), eq(MEMBER_ID))).thenReturn(memberResponse());
 
         mockMvc.perform(delete("/api/members/{memberId}/family-group", MEMBER_ID).with(asSuperAdmin()))
                 .andExpect(status().isOk());
@@ -273,7 +273,8 @@ class MemberControllerTest {
 
     @Test
     void shouldReturnNotFoundWhenUnassigningFamilyGroupFromMissingMember() throws Exception {
-        when(memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID)).thenThrow(new MemberNotFoundException(MEMBER_ID));
+        when(memberService.unassignFamilyGroup(any(AuthenticatedUser.class), eq(MEMBER_ID)))
+                .thenThrow(new MemberNotFoundException(MEMBER_ID));
 
         mockMvc.perform(delete("/api/members/{memberId}/family-group", MEMBER_ID).with(asSuperAdmin()))
                 .andExpect(status().isNotFound());
@@ -282,7 +283,7 @@ class MemberControllerTest {
     private MemberResponse memberResponse() {
         return new MemberResponse(MEMBER_ID, "Marcos", "Gomez", "30111222", "+54 11 4444-5555",
                 "marcos@example.com", 1L, LocalDate.parse("2026-01-01"), MemberStatus.ACTIVE,
-                Instant.parse("2026-01-01T00:00:00Z"));
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"), 1L, 1L);
     }
 
     private RequestPostProcessor asSuperAdmin() {
