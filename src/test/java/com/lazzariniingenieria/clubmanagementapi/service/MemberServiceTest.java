@@ -12,6 +12,7 @@ import com.lazzariniingenieria.clubmanagementapi.dto.MemberResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateMemberRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
+import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
@@ -19,6 +20,7 @@ import com.lazzariniingenieria.clubmanagementapi.mapper.MemberMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.MemberMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.FamilyGroupRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
+import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -35,9 +37,11 @@ class MemberServiceTest {
 
     private static final Long CLUB_ID = 1L;
     private static final Long MEMBER_ID = 10L;
+    private static final Long ACTING_USER_ID = 2L;
     private static final String DNI = "30111222";
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T00:00:00Z");
     private static final LocalDate JOINED_AT = LocalDate.parse("2026-01-01");
+    private static final AuthenticatedUser CURRENT_USER = new AuthenticatedUser(ACTING_USER_ID, CLUB_ID, UserRole.ADMIN, null);
 
     @Mock
     private MemberRepository memberRepository;
@@ -61,7 +65,7 @@ class MemberServiceTest {
         when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(false);
         when(memberRepository.save(any(Member.class))).thenReturn(member());
 
-        MemberResponse response = memberService.createMember(CLUB_ID, request);
+        MemberResponse response = memberService.createMember(CURRENT_USER, request);
 
         ArgumentCaptor<Member> savedMemberCaptor = ArgumentCaptor.forClass(Member.class);
         verify(memberRepository).save(savedMemberCaptor.capture());
@@ -71,6 +75,9 @@ class MemberServiceTest {
         assertThat(savedMember.getStatus()).isEqualTo(MemberStatus.ACTIVE);
         assertThat(savedMember.getFirstName()).isEqualTo("Marcos");
         assertThat(savedMember.getFamilyGroupId()).isNull();
+        assertThat(savedMember.getCreatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(savedMember.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(savedMember.getUpdatedAt()).isNotNull();
         assertThat(response.id()).isEqualTo(MEMBER_ID);
         assertThat(response.dni()).isEqualTo(DNI);
         assertThat(response.email()).isEqualTo("marcos@example.com");
@@ -82,7 +89,7 @@ class MemberServiceTest {
         CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", DNI, null, null, null);
         when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(true);
 
-        assertThatThrownBy(() -> memberService.createMember(CLUB_ID, request)).isInstanceOf(DuplicateDniException.class);
+        assertThatThrownBy(() -> memberService.createMember(CURRENT_USER, request)).isInstanceOf(DuplicateDniException.class);
 
         verify(memberRepository, never()).save(any());
     }
@@ -95,7 +102,7 @@ class MemberServiceTest {
         when(familyGroupRepository.existsByIdAndClubId(2L, CLUB_ID)).thenReturn(true);
         when(memberRepository.save(any(Member.class))).thenReturn(member());
 
-        memberService.createMember(CLUB_ID, request);
+        memberService.createMember(CURRENT_USER, request);
 
         ArgumentCaptor<Member> savedMemberCaptor = ArgumentCaptor.forClass(Member.class);
         verify(memberRepository).save(savedMemberCaptor.capture());
@@ -111,7 +118,7 @@ class MemberServiceTest {
         when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(false);
         when(familyGroupRepository.existsByIdAndClubId(2L, CLUB_ID)).thenReturn(false);
 
-        assertThatThrownBy(() -> memberService.createMember(CLUB_ID, request))
+        assertThatThrownBy(() -> memberService.createMember(CURRENT_USER, request))
                 .isInstanceOf(FamilyGroupNotFoundException.class);
 
         verify(memberRepository, never()).save(any());
@@ -152,11 +159,12 @@ class MemberServiceTest {
         when(memberRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, "30999888", MEMBER_ID)).thenReturn(false);
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
 
-        MemberResponse response = memberService.updateMember(CLUB_ID, MEMBER_ID, request);
+        MemberResponse response = memberService.updateMember(CURRENT_USER, MEMBER_ID, request);
 
         assertThat(response.dni()).isEqualTo("30999888");
         assertThat(response.email()).isEqualTo("new@example.com");
         assertThat(response.familyGroupId()).isEqualTo(1L);
+        assertThat(existingMember.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
     }
 
     @Test
@@ -168,7 +176,7 @@ class MemberServiceTest {
         when(memberRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, DNI, MEMBER_ID)).thenReturn(false);
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
 
-        MemberResponse response = memberService.updateMember(CLUB_ID, MEMBER_ID, request);
+        MemberResponse response = memberService.updateMember(CURRENT_USER, MEMBER_ID, request);
 
         assertThat(response.dni()).isEqualTo(DNI);
         assertThat(response.email()).isEqualTo("updated@example.com");
@@ -183,7 +191,7 @@ class MemberServiceTest {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, "30999888", MEMBER_ID)).thenReturn(true);
 
-        assertThatThrownBy(() -> memberService.updateMember(CLUB_ID, MEMBER_ID, request))
+        assertThatThrownBy(() -> memberService.updateMember(CURRENT_USER, MEMBER_ID, request))
                 .isInstanceOf(DuplicateDniException.class);
 
         verify(memberRepository, never()).save(any());
@@ -195,7 +203,7 @@ class MemberServiceTest {
                 new UpdateMemberRequest("Marcos", "Gomez", "30999888", "+54 11 4444-5555", "new@example.com");
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> memberService.updateMember(CLUB_ID, MEMBER_ID, request))
+        assertThatThrownBy(() -> memberService.updateMember(CURRENT_USER, MEMBER_ID, request))
                 .isInstanceOf(MemberNotFoundException.class);
     }
 
@@ -205,9 +213,10 @@ class MemberServiceTest {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
 
-        MemberResponse response = memberService.deactivateMember(CLUB_ID, MEMBER_ID);
+        MemberResponse response = memberService.deactivateMember(CURRENT_USER, MEMBER_ID);
 
         assertThat(existingMember.getStatus()).isEqualTo(MemberStatus.INACTIVE);
+        assertThat(existingMember.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
         assertThat(response.status()).isEqualTo(MemberStatus.INACTIVE);
     }
 
@@ -215,7 +224,7 @@ class MemberServiceTest {
     void shouldThrowMemberNotFoundWhenDeactivatingMissingMember() {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> memberService.deactivateMember(CLUB_ID, MEMBER_ID))
+        assertThatThrownBy(() -> memberService.deactivateMember(CURRENT_USER, MEMBER_ID))
                 .isInstanceOf(MemberNotFoundException.class);
     }
 
@@ -226,7 +235,7 @@ class MemberServiceTest {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
 
-        MemberResponse response = memberService.reactivateMember(CLUB_ID, MEMBER_ID);
+        MemberResponse response = memberService.reactivateMember(CURRENT_USER, MEMBER_ID);
 
         assertThat(existingMember.getStatus()).isEqualTo(MemberStatus.ACTIVE);
         assertThat(response.status()).isEqualTo(MemberStatus.ACTIVE);
@@ -236,7 +245,7 @@ class MemberServiceTest {
     void shouldThrowMemberNotFoundWhenReactivatingMissingMember() {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> memberService.reactivateMember(CLUB_ID, MEMBER_ID))
+        assertThatThrownBy(() -> memberService.reactivateMember(CURRENT_USER, MEMBER_ID))
                 .isInstanceOf(MemberNotFoundException.class);
     }
 
@@ -247,7 +256,7 @@ class MemberServiceTest {
         when(familyGroupRepository.existsByIdAndClubId(2L, CLUB_ID)).thenReturn(true);
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
 
-        MemberResponse response = memberService.assignFamilyGroup(CLUB_ID, MEMBER_ID, 2L);
+        MemberResponse response = memberService.assignFamilyGroup(CURRENT_USER, MEMBER_ID, 2L);
 
         assertThat(existingMember.getFamilyGroupId()).isEqualTo(2L);
         assertThat(response.familyGroupId()).isEqualTo(2L);
@@ -259,7 +268,7 @@ class MemberServiceTest {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(familyGroupRepository.existsByIdAndClubId(2L, CLUB_ID)).thenReturn(false);
 
-        assertThatThrownBy(() -> memberService.assignFamilyGroup(CLUB_ID, MEMBER_ID, 2L))
+        assertThatThrownBy(() -> memberService.assignFamilyGroup(CURRENT_USER, MEMBER_ID, 2L))
                 .isInstanceOf(FamilyGroupNotFoundException.class);
 
         verify(memberRepository, never()).save(any());
@@ -269,7 +278,7 @@ class MemberServiceTest {
     void shouldThrowMemberNotFoundWhenAssigningFamilyGroupToMissingMember() {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> memberService.assignFamilyGroup(CLUB_ID, MEMBER_ID, 2L))
+        assertThatThrownBy(() -> memberService.assignFamilyGroup(CURRENT_USER, MEMBER_ID, 2L))
                 .isInstanceOf(MemberNotFoundException.class);
     }
 
@@ -279,7 +288,7 @@ class MemberServiceTest {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
 
-        MemberResponse response = memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID);
+        MemberResponse response = memberService.unassignFamilyGroup(CURRENT_USER, MEMBER_ID);
 
         assertThat(existingMember.getFamilyGroupId()).isNull();
         assertThat(response.familyGroupId()).isNull();
@@ -289,7 +298,7 @@ class MemberServiceTest {
     void shouldThrowMemberNotFoundWhenUnassigningFamilyGroupFromMissingMember() {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> memberService.unassignFamilyGroup(CLUB_ID, MEMBER_ID))
+        assertThatThrownBy(() -> memberService.unassignFamilyGroup(CURRENT_USER, MEMBER_ID))
                 .isInstanceOf(MemberNotFoundException.class);
     }
 
@@ -306,6 +315,9 @@ class MemberServiceTest {
                 .joinedAt(JOINED_AT)
                 .status(MemberStatus.ACTIVE)
                 .createdAt(CREATED_AT)
+                .updatedAt(CREATED_AT)
+                .createdByUserId(ACTING_USER_ID)
+                .updatedByUserId(ACTING_USER_ID)
                 .build();
     }
 }

@@ -29,7 +29,7 @@ public class FamilyGroupController {
     @PostMapping
     public ResponseEntity<FamilyGroupResponse> create(@AuthenticationPrincipal AuthenticatedUser currentUser,
                                                         @Valid @RequestBody CreateFamilyGroupRequest request) {
-        FamilyGroupResponse response = familyGroupService.createFamilyGroup(currentUser.clubId(), request);
+        FamilyGroupResponse response = familyGroupService.createFamilyGroup(currentUser, request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -53,7 +53,7 @@ public class FamilyGroupController {
     public ResponseEntity<FamilyGroupResponse> update(@AuthenticationPrincipal AuthenticatedUser currentUser,
                                                         @PathVariable Long familyGroupId,
                                                         @Valid @RequestBody UpdateFamilyGroupRequest request) {
-        FamilyGroupResponse response = familyGroupService.updateFamilyGroup(currentUser.clubId(), familyGroupId, request);
+        FamilyGroupResponse response = familyGroupService.updateFamilyGroup(currentUser, familyGroupId, request);
 
         return ResponseEntity.ok(response);
     }

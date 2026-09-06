@@ -17,6 +17,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
+import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -33,10 +34,13 @@ class AdminServiceTest {
 
     private static final Long CLUB_ID = 1L;
     private static final Long ADMIN_ID = 10L;
+    private static final Long ACTING_USER_ID = 1L;
     private static final String DNI = "30111222";
     private static final String RAW_PASSWORD = "s3cr3t123";
     private static final String HASHED_PASSWORD = "hashed-password";
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T00:00:00Z");
+    private static final AuthenticatedUser CURRENT_USER =
+            new AuthenticatedUser(ACTING_USER_ID, CLUB_ID, UserRole.SUPER_ADMIN, null);
 
     @Mock
     private UserAccountRepository userAccountRepository;
@@ -60,7 +64,7 @@ class AdminServiceTest {
         when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(HASHED_PASSWORD);
         when(userAccountRepository.save(any(UserAccount.class))).thenReturn(adminUser());
 
-        AdminResponse response = adminService.createAdmin(CLUB_ID, request);
+        AdminResponse response = adminService.createAdmin(CURRENT_USER, request);
 
         ArgumentCaptor<UserAccount> savedAdminCaptor = ArgumentCaptor.forClass(UserAccount.class);
         verify(userAccountRepository).save(savedAdminCaptor.capture());
@@ -70,6 +74,8 @@ class AdminServiceTest {
         assertThat(savedAdmin.getRole()).isEqualTo(UserRole.ADMIN);
         assertThat(savedAdmin.getPasswordHash()).isEqualTo(HASHED_PASSWORD);
         assertThat(savedAdmin.isActive()).isTrue();
+        assertThat(savedAdmin.getCreatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(savedAdmin.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
         assertThat(response.id()).isEqualTo(ADMIN_ID);
         assertThat(response.dni()).isEqualTo(DNI);
         assertThat(response.email()).isEqualTo("admin@example.com");
@@ -82,7 +88,7 @@ class AdminServiceTest {
         CreateAdminRequest request = new CreateAdminRequest(DNI, RAW_PASSWORD, null, null);
         when(userAccountRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(true);
 
-        assertThatThrownBy(() -> adminService.createAdmin(CLUB_ID, request)).isInstanceOf(DuplicateDniException.class);
+        assertThatThrownBy(() -> adminService.createAdmin(CURRENT_USER, request)).isInstanceOf(DuplicateDniException.class);
 
         verify(userAccountRepository, never()).save(any());
     }
@@ -121,11 +127,12 @@ class AdminServiceTest {
         when(userAccountRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, "30999888", ADMIN_ID)).thenReturn(false);
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
-        AdminResponse response = adminService.updateAdmin(CLUB_ID, ADMIN_ID, request);
+        AdminResponse response = adminService.updateAdmin(CURRENT_USER, ADMIN_ID, request);
 
         assertThat(response.dni()).isEqualTo("30999888");
         assertThat(response.email()).isEqualTo("new@example.com");
         assertThat(response.memberId()).isEqualTo(9L);
+        assertThat(existingAdmin.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
     }
 
     @Test
@@ -136,7 +143,7 @@ class AdminServiceTest {
         when(userAccountRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, DNI, ADMIN_ID)).thenReturn(false);
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
-        AdminResponse response = adminService.updateAdmin(CLUB_ID, ADMIN_ID, request);
+        AdminResponse response = adminService.updateAdmin(CURRENT_USER, ADMIN_ID, request);
 
         assertThat(response.dni()).isEqualTo(DNI);
         assertThat(response.email()).isEqualTo("updated@example.com");
@@ -150,7 +157,7 @@ class AdminServiceTest {
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, "30999888", ADMIN_ID)).thenReturn(true);
 
-        assertThatThrownBy(() -> adminService.updateAdmin(CLUB_ID, ADMIN_ID, request)).isInstanceOf(DuplicateDniException.class);
+        assertThatThrownBy(() -> adminService.updateAdmin(CURRENT_USER, ADMIN_ID, request)).isInstanceOf(DuplicateDniException.class);
 
         verify(userAccountRepository, never()).save(any());
     }
@@ -160,7 +167,7 @@ class AdminServiceTest {
         UpdateAdminRequest request = new UpdateAdminRequest("30999888", "new@example.com", 9L);
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> adminService.updateAdmin(CLUB_ID, ADMIN_ID, request)).isInstanceOf(AdminNotFoundException.class);
+        assertThatThrownBy(() -> adminService.updateAdmin(CURRENT_USER, ADMIN_ID, request)).isInstanceOf(AdminNotFoundException.class);
     }
 
     @Test
@@ -169,9 +176,10 @@ class AdminServiceTest {
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
-        AdminResponse response = adminService.deactivateAdmin(CLUB_ID, ADMIN_ID);
+        AdminResponse response = adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID);
 
         assertThat(existingAdmin.isActive()).isFalse();
+        assertThat(existingAdmin.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
         assertThat(response.active()).isFalse();
     }
 
@@ -179,7 +187,7 @@ class AdminServiceTest {
     void shouldThrowAdminNotFoundWhenDeactivatingMissingAdmin() {
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> adminService.deactivateAdmin(CLUB_ID, ADMIN_ID)).isInstanceOf(AdminNotFoundException.class);
+        assertThatThrownBy(() -> adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID)).isInstanceOf(AdminNotFoundException.class);
     }
 
     @Test
@@ -189,7 +197,7 @@ class AdminServiceTest {
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
-        AdminResponse response = adminService.reactivateAdmin(CLUB_ID, ADMIN_ID);
+        AdminResponse response = adminService.reactivateAdmin(CURRENT_USER, ADMIN_ID);
 
         assertThat(existingAdmin.isActive()).isTrue();
         assertThat(response.active()).isTrue();
@@ -199,7 +207,7 @@ class AdminServiceTest {
     void shouldThrowAdminNotFoundWhenReactivatingMissingAdmin() {
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> adminService.reactivateAdmin(CLUB_ID, ADMIN_ID)).isInstanceOf(AdminNotFoundException.class);
+        assertThatThrownBy(() -> adminService.reactivateAdmin(CURRENT_USER, ADMIN_ID)).isInstanceOf(AdminNotFoundException.class);
     }
 
     private UserAccount adminUser() {
@@ -212,6 +220,9 @@ class AdminServiceTest {
                 .role(UserRole.ADMIN)
                 .email("admin@example.com")
                 .createdAt(CREATED_AT)
+                .updatedAt(CREATED_AT)
+                .createdByUserId(ACTING_USER_ID)
+                .updatedByUserId(ACTING_USER_ID)
                 .build();
     }
 }
