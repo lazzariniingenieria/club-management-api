@@ -32,6 +32,7 @@ class FamilyGroupServiceTest {
     private static final Long CLUB_ID = 1L;
     private static final Long FAMILY_GROUP_ID = 1L;
     private static final Long ACTING_USER_ID = 2L;
+    private static final Long PREVIOUS_ACTOR_ID = 99L;
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T00:00:00Z");
     private static final AuthenticatedUser CURRENT_USER = new AuthenticatedUser(ACTING_USER_ID, CLUB_ID, UserRole.ADMIN, null);
 
@@ -66,6 +67,9 @@ class FamilyGroupServiceTest {
         assertThat(savedFamilyGroup.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
         assertThat(response.id()).isEqualTo(FAMILY_GROUP_ID);
         assertThat(response.name()).isEqualTo("Familia Gomez");
+        assertThat(response.createdByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(response.updatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(response.updatedAt()).isEqualTo(CREATED_AT);
     }
 
     @Test
@@ -97,7 +101,7 @@ class FamilyGroupServiceTest {
 
     @Test
     void shouldUpdateFamilyGroupNameWhenFound() {
-        FamilyGroup existingFamilyGroup = familyGroup();
+        FamilyGroup existingFamilyGroup = familyGroup(PREVIOUS_ACTOR_ID);
         UpdateFamilyGroupRequest request = new UpdateFamilyGroupRequest("Familia Torres");
         when(familyGroupRepository.findByIdAndClubId(FAMILY_GROUP_ID, CLUB_ID)).thenReturn(Optional.of(existingFamilyGroup));
         when(familyGroupRepository.save(existingFamilyGroup)).thenReturn(existingFamilyGroup);
@@ -106,6 +110,8 @@ class FamilyGroupServiceTest {
 
         assertThat(response.name()).isEqualTo("Familia Torres");
         assertThat(existingFamilyGroup.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(existingFamilyGroup.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+        assertThat(existingFamilyGroup.getUpdatedAt()).isNotEqualTo(CREATED_AT);
     }
 
     @Test
@@ -118,14 +124,18 @@ class FamilyGroupServiceTest {
     }
 
     private FamilyGroup familyGroup() {
+        return familyGroup(ACTING_USER_ID);
+    }
+
+    private FamilyGroup familyGroup(Long actorId) {
         return FamilyGroup.builder()
                 .id(FAMILY_GROUP_ID)
                 .clubId(CLUB_ID)
                 .name("Familia Gomez")
                 .createdAt(CREATED_AT)
                 .updatedAt(CREATED_AT)
-                .createdByUserId(ACTING_USER_ID)
-                .updatedByUserId(ACTING_USER_ID)
+                .createdByUserId(actorId)
+                .updatedByUserId(actorId)
                 .build();
     }
 }

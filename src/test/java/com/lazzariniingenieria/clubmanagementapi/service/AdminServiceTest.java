@@ -35,6 +35,7 @@ class AdminServiceTest {
     private static final Long CLUB_ID = 1L;
     private static final Long ADMIN_ID = 10L;
     private static final Long ACTING_USER_ID = 1L;
+    private static final Long PREVIOUS_ACTOR_ID = 99L;
     private static final String DNI = "30111222";
     private static final String RAW_PASSWORD = "s3cr3t123";
     private static final String HASHED_PASSWORD = "hashed-password";
@@ -81,6 +82,9 @@ class AdminServiceTest {
         assertThat(response.email()).isEqualTo("admin@example.com");
         assertThat(response.memberId()).isEqualTo(5L);
         assertThat(response.active()).isTrue();
+        assertThat(response.createdByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(response.updatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(response.updatedAt()).isEqualTo(CREATED_AT);
     }
 
     @Test
@@ -121,7 +125,7 @@ class AdminServiceTest {
 
     @Test
     void shouldUpdateAdminProfileWhenDniIsAvailable() {
-        UserAccount existingAdmin = adminUser();
+        UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
         UpdateAdminRequest request = new UpdateAdminRequest("30999888", "new@example.com", 9L);
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, "30999888", ADMIN_ID)).thenReturn(false);
@@ -133,6 +137,8 @@ class AdminServiceTest {
         assertThat(response.email()).isEqualTo("new@example.com");
         assertThat(response.memberId()).isEqualTo(9L);
         assertThat(existingAdmin.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(existingAdmin.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+        assertThat(existingAdmin.getUpdatedAt()).isNotEqualTo(CREATED_AT);
     }
 
     @Test
@@ -172,7 +178,7 @@ class AdminServiceTest {
 
     @Test
     void shouldDeactivateAdminWhenFound() {
-        UserAccount existingAdmin = adminUser();
+        UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
@@ -180,6 +186,8 @@ class AdminServiceTest {
 
         assertThat(existingAdmin.isActive()).isFalse();
         assertThat(existingAdmin.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(existingAdmin.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+        assertThat(existingAdmin.getUpdatedAt()).isNotEqualTo(CREATED_AT);
         assertThat(response.active()).isFalse();
     }
 
@@ -192,7 +200,7 @@ class AdminServiceTest {
 
     @Test
     void shouldReactivateAdminWhenFound() {
-        UserAccount existingAdmin = adminUser();
+        UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
         existingAdmin.setActive(false);
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
@@ -200,6 +208,9 @@ class AdminServiceTest {
         AdminResponse response = adminService.reactivateAdmin(CURRENT_USER, ADMIN_ID);
 
         assertThat(existingAdmin.isActive()).isTrue();
+        assertThat(existingAdmin.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(existingAdmin.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+        assertThat(existingAdmin.getUpdatedAt()).isNotEqualTo(CREATED_AT);
         assertThat(response.active()).isTrue();
     }
 
@@ -211,6 +222,10 @@ class AdminServiceTest {
     }
 
     private UserAccount adminUser() {
+        return adminUser(ACTING_USER_ID);
+    }
+
+    private UserAccount adminUser(Long actorId) {
         return UserAccount.builder()
                 .id(ADMIN_ID)
                 .clubId(CLUB_ID)
@@ -221,8 +236,8 @@ class AdminServiceTest {
                 .email("admin@example.com")
                 .createdAt(CREATED_AT)
                 .updatedAt(CREATED_AT)
-                .createdByUserId(ACTING_USER_ID)
-                .updatedByUserId(ACTING_USER_ID)
+                .createdByUserId(actorId)
+                .updatedByUserId(actorId)
                 .build();
     }
 }

@@ -38,6 +38,7 @@ class MemberServiceTest {
     private static final Long CLUB_ID = 1L;
     private static final Long MEMBER_ID = 10L;
     private static final Long ACTING_USER_ID = 2L;
+    private static final Long PREVIOUS_ACTOR_ID = 99L;
     private static final String DNI = "30111222";
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T00:00:00Z");
     private static final LocalDate JOINED_AT = LocalDate.parse("2026-01-01");
@@ -82,6 +83,9 @@ class MemberServiceTest {
         assertThat(response.dni()).isEqualTo(DNI);
         assertThat(response.email()).isEqualTo("marcos@example.com");
         assertThat(response.status()).isEqualTo(MemberStatus.ACTIVE);
+        assertThat(response.createdByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(response.updatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(response.updatedAt()).isEqualTo(CREATED_AT);
     }
 
     @Test
@@ -152,7 +156,7 @@ class MemberServiceTest {
 
     @Test
     void shouldUpdateMemberProfileWhenDniIsAvailable() {
-        Member existingMember = member();
+        Member existingMember = member(PREVIOUS_ACTOR_ID);
         UpdateMemberRequest request =
                 new UpdateMemberRequest("Marcos", "Gomez", "30999888", "+54 11 4444-5555", "new@example.com");
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
@@ -165,6 +169,8 @@ class MemberServiceTest {
         assertThat(response.email()).isEqualTo("new@example.com");
         assertThat(response.familyGroupId()).isEqualTo(1L);
         assertThat(existingMember.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(existingMember.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+        assertThat(existingMember.getUpdatedAt()).isNotEqualTo(CREATED_AT);
     }
 
     @Test
@@ -209,7 +215,7 @@ class MemberServiceTest {
 
     @Test
     void shouldDeactivateMemberWhenFound() {
-        Member existingMember = member();
+        Member existingMember = member(PREVIOUS_ACTOR_ID);
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
 
@@ -217,6 +223,8 @@ class MemberServiceTest {
 
         assertThat(existingMember.getStatus()).isEqualTo(MemberStatus.INACTIVE);
         assertThat(existingMember.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(existingMember.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+        assertThat(existingMember.getUpdatedAt()).isNotEqualTo(CREATED_AT);
         assertThat(response.status()).isEqualTo(MemberStatus.INACTIVE);
     }
 
@@ -230,7 +238,7 @@ class MemberServiceTest {
 
     @Test
     void shouldReactivateMemberWhenFound() {
-        Member existingMember = member();
+        Member existingMember = member(PREVIOUS_ACTOR_ID);
         existingMember.setStatus(MemberStatus.INACTIVE);
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
@@ -238,6 +246,9 @@ class MemberServiceTest {
         MemberResponse response = memberService.reactivateMember(CURRENT_USER, MEMBER_ID);
 
         assertThat(existingMember.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        assertThat(existingMember.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(existingMember.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+        assertThat(existingMember.getUpdatedAt()).isNotEqualTo(CREATED_AT);
         assertThat(response.status()).isEqualTo(MemberStatus.ACTIVE);
     }
 
@@ -251,7 +262,7 @@ class MemberServiceTest {
 
     @Test
     void shouldAssignFamilyGroupWhenItExistsInTheSameClub() {
-        Member existingMember = member();
+        Member existingMember = member(PREVIOUS_ACTOR_ID);
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(familyGroupRepository.existsByIdAndClubId(2L, CLUB_ID)).thenReturn(true);
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
@@ -259,6 +270,9 @@ class MemberServiceTest {
         MemberResponse response = memberService.assignFamilyGroup(CURRENT_USER, MEMBER_ID, 2L);
 
         assertThat(existingMember.getFamilyGroupId()).isEqualTo(2L);
+        assertThat(existingMember.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(existingMember.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+        assertThat(existingMember.getUpdatedAt()).isNotEqualTo(CREATED_AT);
         assertThat(response.familyGroupId()).isEqualTo(2L);
     }
 
@@ -284,13 +298,16 @@ class MemberServiceTest {
 
     @Test
     void shouldUnassignFamilyGroupWhenFound() {
-        Member existingMember = member();
+        Member existingMember = member(PREVIOUS_ACTOR_ID);
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
 
         MemberResponse response = memberService.unassignFamilyGroup(CURRENT_USER, MEMBER_ID);
 
         assertThat(existingMember.getFamilyGroupId()).isNull();
+        assertThat(existingMember.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(existingMember.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+        assertThat(existingMember.getUpdatedAt()).isNotEqualTo(CREATED_AT);
         assertThat(response.familyGroupId()).isNull();
     }
 
@@ -303,6 +320,10 @@ class MemberServiceTest {
     }
 
     private Member member() {
+        return member(ACTING_USER_ID);
+    }
+
+    private Member member(Long actorId) {
         return Member.builder()
                 .id(MEMBER_ID)
                 .clubId(CLUB_ID)
@@ -316,8 +337,8 @@ class MemberServiceTest {
                 .status(MemberStatus.ACTIVE)
                 .createdAt(CREATED_AT)
                 .updatedAt(CREATED_AT)
-                .createdByUserId(ACTING_USER_ID)
-                .updatedByUserId(ACTING_USER_ID)
+                .createdByUserId(actorId)
+                .updatedByUserId(actorId)
                 .build();
     }
 }
