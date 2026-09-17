@@ -25,6 +25,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.UNAUTHORIZED, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ApiErrorDto> handleInvalidRefreshToken(InvalidRefreshTokenException exception) {
+        log.warn("Refresh attempt rejected: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.UNAUTHORIZED, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiErrorDto> handleMalformedRequestBody(HttpMessageNotReadableException exception) {
         log.warn("Rejected request with a malformed body: {}", exception.getMessage());

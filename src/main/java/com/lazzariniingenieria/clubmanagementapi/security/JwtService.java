@@ -23,6 +23,10 @@ public class JwtService {
         this.expirationMs = expirationMs;
     }
 
+    public long getExpirationSeconds() {
+        return expirationMs / 1000;
+    }
+
     public String generateToken(UserAccount user) {
         Instant now = Instant.now();
 
