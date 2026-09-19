@@ -58,7 +58,7 @@ class AdminControllerTest {
     void shouldReturnCreatedAdminWhenRequesterIsSuperAdmin() throws Exception {
         String requestBody = readFixture("create-admin-request-valid.json");
         AdminResponse response = adminResponse();
-        when(adminService.createAdmin(eq(CLUB_ID), any(CreateAdminRequest.class))).thenReturn(response);
+        when(adminService.createAdmin(any(AuthenticatedUser.class), any(CreateAdminRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/admins")
                         .with(asSuperAdmin())
@@ -73,7 +73,7 @@ class AdminControllerTest {
     @Test
     void shouldReturnConflictWhenCreatingAdminWithDuplicateDni() throws Exception {
         String requestBody = readFixture("create-admin-request-valid.json");
-        when(adminService.createAdmin(eq(CLUB_ID), any(CreateAdminRequest.class)))
+        when(adminService.createAdmin(any(AuthenticatedUser.class), any(CreateAdminRequest.class)))
                 .thenThrow(new DuplicateDniException("30222333"));
 
         mockMvc.perform(post("/api/admins")
@@ -167,7 +167,7 @@ class AdminControllerTest {
     @Test
     void shouldUpdateAdminWhenValid() throws Exception {
         String requestBody = readFixture("update-admin-request-valid.json");
-        when(adminService.updateAdmin(eq(CLUB_ID), eq(ADMIN_ID), any(UpdateAdminRequest.class)))
+        when(adminService.updateAdmin(any(AuthenticatedUser.class), eq(ADMIN_ID), any(UpdateAdminRequest.class)))
                 .thenReturn(adminResponse());
 
         mockMvc.perform(patch("/api/admins/{adminId}", ADMIN_ID)
@@ -192,8 +192,8 @@ class AdminControllerTest {
     @Test
     void shouldDeactivateAdmin() throws Exception {
         AdminResponse deactivated = new AdminResponse(ADMIN_ID, "30222333", "admin@example.com", 5L, false,
-                Instant.parse("2026-01-01T00:00:00Z"));
-        when(adminService.deactivateAdmin(CLUB_ID, ADMIN_ID)).thenReturn(deactivated);
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-02T00:00:00Z"), 1L, 1L);
+        when(adminService.deactivateAdmin(any(AuthenticatedUser.class), eq(ADMIN_ID))).thenReturn(deactivated);
 
         mockMvc.perform(patch("/api/admins/{adminId}/deactivate", ADMIN_ID).with(asSuperAdmin()))
                 .andExpect(status().isOk())
@@ -202,7 +202,7 @@ class AdminControllerTest {
 
     @Test
     void shouldReactivateAdmin() throws Exception {
-        when(adminService.reactivateAdmin(CLUB_ID, ADMIN_ID)).thenReturn(adminResponse());
+        when(adminService.reactivateAdmin(any(AuthenticatedUser.class), eq(ADMIN_ID))).thenReturn(adminResponse());
 
         mockMvc.perform(patch("/api/admins/{adminId}/reactivate", ADMIN_ID).with(asSuperAdmin()))
                 .andExpect(status().isOk())
@@ -211,7 +211,7 @@ class AdminControllerTest {
 
     private AdminResponse adminResponse() {
         return new AdminResponse(ADMIN_ID, "30222333", "admin@example.com", 5L, true,
-                Instant.parse("2026-01-01T00:00:00Z"));
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"), 1L, 1L);
     }
 
     private RequestPostProcessor asSuperAdmin() {
