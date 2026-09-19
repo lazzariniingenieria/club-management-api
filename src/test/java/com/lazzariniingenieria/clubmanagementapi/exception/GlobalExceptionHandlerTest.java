@@ -134,6 +134,32 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnBadRequestWithExceptionMessageWhenPaidByMemberIsNotInFamilyGroup() {
+        PaidByMemberNotInFamilyGroupException exception = new PaidByMemberNotInFamilyGroupException(2L, 1L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handlePaidByMemberNotInFamilyGroup(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.message()).isEqualTo("Member 2 is not in the same family group as member 1");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnBadRequestWithExceptionMessageWhenPeriodsCoveredAreDuplicated() {
+        DuplicatePeriodCoveredException exception = new DuplicatePeriodCoveredException();
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleDuplicatePeriodCovered(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.message()).isEqualTo("periodsCovered must not contain duplicate dates");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
     void shouldReturnConflictWithGenericMessageWhenDatabaseConstraintIsViolated() {
         DataIntegrityViolationException exception = new DataIntegrityViolationException("constraint violated");
 
