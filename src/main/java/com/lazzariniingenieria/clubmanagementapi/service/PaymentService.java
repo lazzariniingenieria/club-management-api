@@ -4,6 +4,7 @@ import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
+import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.Payment;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicatePeriodCoveredException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
@@ -37,10 +38,10 @@ public class PaymentService {
     public List<PaymentResponse> recordPayment(AuthenticatedUser currentUser, RecordPaymentRequest request) {
         Long clubId = currentUser.clubId();
         Member member = findMemberOrThrow(clubId, request.memberId());
-        validatePaidByMember(clubId, member, request.paidByMemberId());
+        Long paidByMemberId = resolvePaidByMemberId(clubId, member, request.paidByMemberId());
         validateDistinctPeriods(request.periodsCovered());
 
-        List<Payment> payments = buildPayments(currentUser, request, Instant.now());
+        List<Payment> payments = buildPayments(request, paidByMemberId, currentUser.userAccountId());
         List<Payment> savedPayments = paymentRepository.saveAll(payments);
         log.info("Recorded {} payment(s) for memberId={} in clubId={}", savedPayments.size(), request.memberId(), clubId);
 
@@ -57,6 +58,7 @@ public class PaymentService {
     public List<MemberDelinquencyResponse> listMemberDelinquency(Long clubId) {
         List<Member> members = memberRepository.findByClubIdOrderByCreatedAtDesc(clubId);
         List<MemberDelinquencyResponse> report = members.stream()
+                .filter(member -> member.getStatus() == MemberStatus.ACTIVE)
                 .map(this::toDelinquencyResponse)
                 .sorted(Comparator.comparingLong(MemberDelinquencyResponse::daysOverdue).reversed())
                 .toList();
@@ -64,18 +66,19 @@ public class PaymentService {
         return report;
     }
 
-    private List<Payment> buildPayments(AuthenticatedUser currentUser, RecordPaymentRequest request, Instant now) {
+    private List<Payment> buildPayments(RecordPaymentRequest request, Long paidByMemberId, Long recordedByUserId) {
+        Instant now = Instant.now();
         List<Payment> payments = new ArrayList<>();
 
         for (LocalDate periodCovered : request.periodsCovered()) {
             Payment payment = Payment.builder()
                     .memberId(request.memberId())
-                    .paidByMemberId(request.paidByMemberId())
+                    .paidByMemberId(paidByMemberId)
                     .amount(request.amount())
                     .paidAt(now)
                     .periodCovered(periodCovered)
                     .paymentMethod(request.paymentMethod())
-                    .recordedByUserId(currentUser.userAccountId())
+                    .recordedByUserId(recordedByUserId)
                     .createdAt(now)
                     .build();
             payments.add(payment);
@@ -96,9 +99,9 @@ public class PaymentService {
                 daysOverdue);
     }
 
-    private void validatePaidByMember(Long clubId, Member member, Long paidByMemberId) {
+    private Long resolvePaidByMemberId(Long clubId, Member member, Long paidByMemberId) {
         if (paidByMemberId == null || paidByMemberId.equals(member.getId())) {
-            return;
+            return null;
         }
 
         Member paidByMember = memberRepository
@@ -110,6 +113,8 @@ public class PaymentService {
         if (!sameFamilyGroup) {
             throw new PaidByMemberNotInFamilyGroupException(paidByMemberId, member.getId());
         }
+
+        return paidByMemberId;
     }
 
     private void validateDistinctPeriods(List<LocalDate> periodsCovered) {

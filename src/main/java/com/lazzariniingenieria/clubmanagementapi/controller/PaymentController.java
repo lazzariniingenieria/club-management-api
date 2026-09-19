@@ -15,15 +15,17 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequestMapping("/api/payments")
 @RequiredArgsConstructor
 public class PaymentController {
 
     private final PaymentService paymentService;
 
-    @PostMapping("/api/payments")
+    @PostMapping
     public ResponseEntity<List<PaymentResponse>> record(@AuthenticationPrincipal AuthenticatedUser currentUser,
                                                           @Valid @RequestBody RecordPaymentRequest request) {
         List<PaymentResponse> response = paymentService.recordPayment(currentUser, request);
@@ -31,7 +33,7 @@ public class PaymentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @GetMapping("/api/members/{memberId}/payments")
+    @GetMapping("/members/{memberId}")
     public ResponseEntity<List<PaymentResponse>> listForMember(@AuthenticationPrincipal AuthenticatedUser currentUser,
                                                                 @PathVariable Long memberId) {
         List<PaymentResponse> response = paymentService.listPaymentsForMember(currentUser.clubId(), memberId);
@@ -39,7 +41,7 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/api/payments/delinquency")
+    @GetMapping("/delinquency")
     public ResponseEntity<List<MemberDelinquencyResponse>> listDelinquency(@AuthenticationPrincipal AuthenticatedUser currentUser) {
         List<MemberDelinquencyResponse> response = paymentService.listMemberDelinquency(currentUser.clubId());
 

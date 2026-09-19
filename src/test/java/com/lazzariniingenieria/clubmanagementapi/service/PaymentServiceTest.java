@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -128,6 +129,19 @@ class PaymentServiceTest {
     }
 
     @Test
+    void shouldNormalizePaidByMemberIdToNullWhenSameAsPayingMember() {
+        RecordPaymentRequest request = new RecordPaymentRequest(MEMBER_ID, MEMBER_ID, AMOUNT,
+                List.of(LocalDate.parse("2026-07-01")), PaymentMethod.CASH);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
+        when(paymentRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<PaymentResponse> response = paymentService.recordPayment(CURRENT_USER, request);
+
+        assertThat(response.get(0).paidByMemberId()).isNull();
+        verify(memberRepository, times(1)).findByIdAndClubId(any(), any());
+    }
+
+    @Test
     void shouldThrowMemberNotFoundWhenPaidByMemberDoesNotExist() {
         RecordPaymentRequest request = new RecordPaymentRequest(MEMBER_ID, OTHER_MEMBER_ID, AMOUNT,
                 List.of(LocalDate.parse("2026-07-01")), PaymentMethod.CASH);
@@ -210,6 +224,20 @@ class PaymentServiceTest {
         assertThat(report).hasSize(2);
         assertThat(report.get(0).memberId()).isEqualTo(OTHER_MEMBER_ID);
         assertThat(report.get(0).daysOverdue()).isGreaterThan(report.get(1).daysOverdue());
+    }
+
+    @Test
+    void shouldExcludeInactiveMembersFromDelinquencyReport() {
+        Member inactiveMember = member(OTHER_MEMBER_ID, null);
+        inactiveMember.setStatus(MemberStatus.INACTIVE);
+        when(memberRepository.findByClubIdOrderByCreatedAtDesc(CLUB_ID)).thenReturn(List.of(member(MEMBER_ID, null), inactiveMember));
+        when(paymentRepository.findTopByMemberIdOrderByPeriodCoveredDesc(MEMBER_ID)).thenReturn(Optional.empty());
+
+        List<MemberDelinquencyResponse> report = paymentService.listMemberDelinquency(CLUB_ID);
+
+        assertThat(report).hasSize(1);
+        assertThat(report.get(0).memberId()).isEqualTo(MEMBER_ID);
+        verify(paymentRepository, never()).findTopByMemberIdOrderByPeriodCoveredDesc(OTHER_MEMBER_ID);
     }
 
     @Test

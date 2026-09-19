@@ -145,6 +145,17 @@ class PaymentControllerTest {
     }
 
     @Test
+    void shouldReturnBadRequestWhenAmountExceedsAllowedDigits() throws Exception {
+        String requestBody = readFixture("record-payment-request-too-many-digits.json");
+
+        mockMvc.perform(post("/api/payments")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void shouldReturnForbiddenWhenRequesterIsMember() throws Exception {
         String requestBody = readFixture("record-payment-request-valid.json");
 
@@ -169,7 +180,7 @@ class PaymentControllerTest {
     void shouldReturnPaymentHistoryForMember() throws Exception {
         when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID)).thenReturn(List.of(paymentResponse()));
 
-        mockMvc.perform(get("/api/members/{memberId}/payments", MEMBER_ID).with(asAdmin()))
+        mockMvc.perform(get("/api/payments/members/{memberId}", MEMBER_ID).with(asAdmin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].memberId", is(1)));
     }
@@ -178,7 +189,7 @@ class PaymentControllerTest {
     void shouldReturnNotFoundWhenListingPaymentsForMissingMember() throws Exception {
         when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID)).thenThrow(new MemberNotFoundException(MEMBER_ID));
 
-        mockMvc.perform(get("/api/members/{memberId}/payments", MEMBER_ID).with(asAdmin()))
+        mockMvc.perform(get("/api/payments/members/{memberId}", MEMBER_ID).with(asAdmin()))
                 .andExpect(status().isNotFound());
     }
 
