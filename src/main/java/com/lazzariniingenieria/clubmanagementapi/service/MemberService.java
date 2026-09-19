@@ -34,6 +34,10 @@ public class MemberService {
             throw new DuplicateDniException(request.dni());
         }
 
+        if (request.familyGroupId() != null) {
+            validateFamilyGroupExists(clubId, request.familyGroupId());
+        }
+
         Member member = Member.builder()
                 .clubId(clubId)
                 .firstName(request.firstName())
@@ -41,6 +45,7 @@ public class MemberService {
                 .dni(request.dni())
                 .phone(request.phone())
                 .email(request.email())
+                .familyGroupId(request.familyGroupId())
                 .joinedAt(LocalDate.now())
                 .status(MemberStatus.ACTIVE)
                 .createdAt(Instant.now())
@@ -106,11 +111,7 @@ public class MemberService {
 
     public MemberResponse assignFamilyGroup(Long clubId, Long memberId, Long familyGroupId) {
         Member member = findMemberOrThrow(clubId, memberId);
-        boolean familyGroupExists = familyGroupRepository.existsByIdAndClubId(familyGroupId, clubId);
-
-        if (!familyGroupExists) {
-            throw new FamilyGroupNotFoundException(familyGroupId);
-        }
+        validateFamilyGroupExists(clubId, familyGroupId);
 
         member.setFamilyGroupId(familyGroupId);
 
@@ -128,6 +129,14 @@ public class MemberService {
         log.info("Unassigned family group from member memberId={} for clubId={}", memberId, clubId);
 
         return memberMapper.toResponse(savedMember);
+    }
+
+    private void validateFamilyGroupExists(Long clubId, Long familyGroupId) {
+        boolean familyGroupExists = familyGroupRepository.existsByIdAndClubId(familyGroupId, clubId);
+
+        if (!familyGroupExists) {
+            throw new FamilyGroupNotFoundException(familyGroupId);
+        }
     }
 
     private Member findMemberOrThrow(Long clubId, Long memberId) {

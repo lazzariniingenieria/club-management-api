@@ -57,7 +57,7 @@ class MemberServiceTest {
     @Test
     void shouldCreateMemberWhenDniIsNotTaken() {
         CreateMemberRequest request =
-                new CreateMemberRequest("Marcos", "Gomez", DNI, "+54 11 4444-5555", "marcos@example.com");
+                new CreateMemberRequest("Marcos", "Gomez", DNI, "+54 11 4444-5555", "marcos@example.com", null);
         when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(false);
         when(memberRepository.save(any(Member.class))).thenReturn(member());
 
@@ -79,10 +79,40 @@ class MemberServiceTest {
 
     @Test
     void shouldThrowDuplicateDniWhenCreatingWithDniAlreadyUsedInClub() {
-        CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", DNI, null, null);
+        CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", DNI, null, null, null);
         when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(true);
 
         assertThatThrownBy(() -> memberService.createMember(CLUB_ID, request)).isInstanceOf(DuplicateDniException.class);
+
+        verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldCreateMemberWithFamilyGroupWhenProvidedAndItExistsInClub() {
+        CreateMemberRequest request =
+                new CreateMemberRequest("Marcos", "Gomez", DNI, "+54 11 4444-5555", "marcos@example.com", 2L);
+        when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(false);
+        when(familyGroupRepository.existsByIdAndClubId(2L, CLUB_ID)).thenReturn(true);
+        when(memberRepository.save(any(Member.class))).thenReturn(member());
+
+        memberService.createMember(CLUB_ID, request);
+
+        ArgumentCaptor<Member> savedMemberCaptor = ArgumentCaptor.forClass(Member.class);
+        verify(memberRepository).save(savedMemberCaptor.capture());
+        Member savedMember = savedMemberCaptor.getValue();
+
+        assertThat(savedMember.getFamilyGroupId()).isEqualTo(2L);
+    }
+
+    @Test
+    void shouldThrowFamilyGroupNotFoundWhenCreatingMemberWithMissingFamilyGroup() {
+        CreateMemberRequest request =
+                new CreateMemberRequest("Marcos", "Gomez", DNI, "+54 11 4444-5555", "marcos@example.com", 2L);
+        when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(false);
+        when(familyGroupRepository.existsByIdAndClubId(2L, CLUB_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> memberService.createMember(CLUB_ID, request))
+                .isInstanceOf(FamilyGroupNotFoundException.class);
 
         verify(memberRepository, never()).save(any());
     }

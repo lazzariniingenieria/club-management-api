@@ -100,6 +100,35 @@ class MemberControllerTest {
     }
 
     @Test
+    void shouldReturnCreatedMemberWithFamilyGroupWhenValid() throws Exception {
+        String requestBody = readFixture("create-member-request-with-family-group.json");
+        MemberResponse response = new MemberResponse(MEMBER_ID, "Marcos", "Gomez", "30111222", "+54 11 4444-5555",
+                "marcos@example.com", 2L, LocalDate.parse("2026-01-01"), MemberStatus.ACTIVE,
+                Instant.parse("2026-01-01T00:00:00Z"));
+        when(memberService.createMember(eq(CLUB_ID), any(CreateMemberRequest.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/members")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.familyGroupId", is(2)));
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenCreatingMemberWithMissingFamilyGroup() throws Exception {
+        String requestBody = readFixture("create-member-request-with-family-group.json");
+        when(memberService.createMember(eq(CLUB_ID), any(CreateMemberRequest.class)))
+                .thenThrow(new FamilyGroupNotFoundException(2L));
+
+        mockMvc.perform(post("/api/members")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void shouldReturnBadRequestWhenFirstNameIsBlank() throws Exception {
         String requestBody = readFixture("create-member-request-blank-first-name.json");
 

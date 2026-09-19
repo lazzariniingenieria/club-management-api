@@ -21,5 +21,7 @@ public record CreateMemberRequest(@NotBlank(message = "firstName is required")
 
                                    @Email(message = "email must be a valid address")
                                    @Size(max = 150, message = "email must be at most 150 characters")
-                                   String email) {
+                                   String email,
+
+                                   Long familyGroupId) {
 }
