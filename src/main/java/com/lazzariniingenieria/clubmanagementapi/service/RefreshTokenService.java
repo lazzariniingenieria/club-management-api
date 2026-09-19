@@ -9,10 +9,12 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class RefreshTokenService {
 
     private static final int TOKEN_BYTE_LENGTH = 32;
@@ -38,6 +40,7 @@ public class RefreshTokenService {
                 .build();
 
         refreshTokenRepository.save(refreshToken);
+        log.info("Issued refresh token for userAccountId={}", userAccountId);
 
         return rawToken;
     }
@@ -49,6 +52,7 @@ public class RefreshTokenService {
         validateUsable(refreshToken);
         refreshToken.setRevokedAt(Instant.now());
         refreshTokenRepository.save(refreshToken);
+        log.info("Rotated refresh token for userAccountId={}", refreshToken.getUserAccountId());
 
         return refreshToken;
     }

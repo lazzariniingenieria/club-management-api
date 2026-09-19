@@ -36,13 +36,13 @@ class RefreshTokenServiceTest {
 
     @Test
     void shouldPersistHashedTokenWithFutureExpirationAndReturnRawToken() {
-        ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
+        ArgumentCaptor<RefreshToken> savedTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         String rawToken = refreshTokenService.issueToken(USER_ACCOUNT_ID);
 
-        verify(refreshTokenRepository).save(captor.capture());
-        RefreshToken savedToken = captor.getValue();
+        verify(refreshTokenRepository).save(savedTokenCaptor.capture());
+        RefreshToken savedToken = savedTokenCaptor.getValue();
         assertThat(rawToken).isNotBlank();
         assertThat(savedToken.getUserAccountId()).isEqualTo(USER_ACCOUNT_ID);
         assertThat(savedToken.getTokenHash()).isNotEqualTo(rawToken);
@@ -62,11 +62,11 @@ class RefreshTokenServiceTest {
 
     @Test
     void shouldHashSameRawTokenToTheSameValue() {
-        ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
+        ArgumentCaptor<RefreshToken> savedTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
         String rawToken = refreshTokenService.issueToken(USER_ACCOUNT_ID);
-        verify(refreshTokenRepository).save(captor.capture());
-        String storedHash = captor.getValue().getTokenHash();
+        verify(refreshTokenRepository).save(savedTokenCaptor.capture());
+        String storedHash = savedTokenCaptor.getValue().getTokenHash();
         RefreshToken storedRefreshToken = validRefreshToken(storedHash);
         when(refreshTokenRepository.findByTokenHash(storedHash)).thenReturn(Optional.of(storedRefreshToken));
 
