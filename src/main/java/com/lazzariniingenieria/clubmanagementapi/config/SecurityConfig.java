@@ -31,6 +31,7 @@ public class SecurityConfig {
         http.exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
         http.authorizeHttpRequests(authorize -> authorize
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/refresh").permitAll()
                 .requestMatchers("/api/admins/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/members/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/family-groups/**").hasAnyRole("SUPER_ADMIN", "ADMIN")

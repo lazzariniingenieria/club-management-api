@@ -42,6 +42,19 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnUnauthorizedWithExceptionMessageWhenRefreshTokenIsInvalid() {
+        InvalidRefreshTokenException exception = new InvalidRefreshTokenException();
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleInvalidRefreshToken(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(body.status()).isEqualTo(401);
+        assertThat(body.message()).isEqualTo("Invalid or expired refresh token");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
     void shouldReturnBadRequestWhenRequestBodyIsMalformed() {
         HttpMessageNotReadableException exception = new HttpMessageNotReadableException("JSON parse error", mock(HttpInputMessage.class));
 
