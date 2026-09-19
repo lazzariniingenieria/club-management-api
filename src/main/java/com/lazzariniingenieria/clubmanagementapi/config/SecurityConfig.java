@@ -34,6 +34,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/admins/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/members/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/family-groups/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers("/api/payments/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .anyRequest().authenticated());
         http.addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
 

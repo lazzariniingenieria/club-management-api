@@ -60,6 +60,20 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(PaidByMemberNotInFamilyGroupException.class)
+    public ResponseEntity<ApiErrorDto> handlePaidByMemberNotInFamilyGroup(PaidByMemberNotInFamilyGroupException exception) {
+        log.warn("Rejected payment due to family group mismatch: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(DuplicatePeriodCoveredException.class)
+    public ResponseEntity<ApiErrorDto> handleDuplicatePeriodCovered(DuplicatePeriodCoveredException exception) {
+        log.warn("Rejected payment due to duplicate periods covered: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorDto> handleDataIntegrityViolation(DataIntegrityViolationException exception) {
         log.warn("Rejected request due to a database constraint violation", exception);
