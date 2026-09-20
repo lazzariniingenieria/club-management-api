@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
@@ -21,6 +22,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundExcepti
 import com.lazzariniingenieria.clubmanagementapi.exception.PaidByMemberNotInFamilyGroupException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.PaymentMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.PaymentMapperImpl;
+import com.lazzariniingenieria.clubmanagementapi.repository.MemberLastPaidPeriod;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.PaymentRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
@@ -84,6 +86,19 @@ class PaymentServiceTest {
         assertThat(response).hasSize(1);
         assertThat(response.get(0).memberId()).isEqualTo(MEMBER_ID);
         assertThat(response.get(0).periodCovered()).isEqualTo(LocalDate.parse("2026-07-01"));
+    }
+
+    @Test
+    void shouldNormalizeAmountToTwoDecimalPlacesSoResponseMatchesWhatTheDatabaseStores() {
+        RecordPaymentRequest request = new RecordPaymentRequest(MEMBER_ID, null, new BigDecimal("15000"),
+                List.of(LocalDate.parse("2026-07-01")), PaymentMethod.CASH);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
+        when(paymentRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<PaymentResponse> response = paymentService.recordPayment(CURRENT_USER, request);
+
+        assertThat(response.get(0).amount().scale()).isEqualTo(2);
+        assertThat(response.get(0).amount()).isEqualByComparingTo("15000");
     }
 
     @Test
@@ -211,13 +226,10 @@ class PaymentServiceTest {
     @Test
     void shouldSortMemberDelinquencyByDaysOverdueDescending() {
         LocalDate today = LocalDate.now();
-        Member upToDateMember = member(MEMBER_ID, null);
-        Member overdueMember = member(OTHER_MEMBER_ID, null);
-        when(memberRepository.findByClubIdOrderByCreatedAtDesc(CLUB_ID)).thenReturn(List.of(upToDateMember, overdueMember));
-        when(paymentRepository.findTopByMemberIdOrderByPeriodCoveredDesc(MEMBER_ID))
-                .thenReturn(Optional.of(payment(MEMBER_ID, today.withDayOfMonth(1))));
-        when(paymentRepository.findTopByMemberIdOrderByPeriodCoveredDesc(OTHER_MEMBER_ID))
-                .thenReturn(Optional.of(payment(OTHER_MEMBER_ID, today.minusMonths(3).withDayOfMonth(1))));
+        stubActiveMembers(member(MEMBER_ID, null), member(OTHER_MEMBER_ID, null));
+        when(paymentRepository.findLastPaidPeriodByMemberIds(any())).thenReturn(List.of(
+                lastPaidPeriod(MEMBER_ID, today.withDayOfMonth(1)),
+                lastPaidPeriod(OTHER_MEMBER_ID, today.minusMonths(3).withDayOfMonth(1))));
 
         List<MemberDelinquencyResponse> report = paymentService.listMemberDelinquency(CLUB_ID);
 
@@ -227,17 +239,24 @@ class PaymentServiceTest {
     }
 
     @Test
-    void shouldExcludeInactiveMembersFromDelinquencyReport() {
-        Member inactiveMember = member(OTHER_MEMBER_ID, null);
-        inactiveMember.setStatus(MemberStatus.INACTIVE);
-        when(memberRepository.findByClubIdOrderByCreatedAtDesc(CLUB_ID)).thenReturn(List.of(member(MEMBER_ID, null), inactiveMember));
-        when(paymentRepository.findTopByMemberIdOrderByPeriodCoveredDesc(MEMBER_ID)).thenReturn(Optional.empty());
+    void shouldQueryOnlyActiveMembersAndResolveLastPaidPeriodsInASingleQuery() {
+        stubActiveMembers(member(MEMBER_ID, null), member(OTHER_MEMBER_ID, null));
+        when(paymentRepository.findLastPaidPeriodByMemberIds(any())).thenReturn(List.of());
+
+        paymentService.listMemberDelinquency(CLUB_ID);
+
+        verify(memberRepository).findByClubIdAndStatusOrderByCreatedAtDesc(CLUB_ID, MemberStatus.ACTIVE);
+        verify(paymentRepository, times(1)).findLastPaidPeriodByMemberIds(List.of(MEMBER_ID, OTHER_MEMBER_ID));
+    }
+
+    @Test
+    void shouldReturnEmptyDelinquencyReportWithoutQueryingPaymentsWhenClubHasNoActiveMembers() {
+        stubActiveMembers();
 
         List<MemberDelinquencyResponse> report = paymentService.listMemberDelinquency(CLUB_ID);
 
-        assertThat(report).hasSize(1);
-        assertThat(report.get(0).memberId()).isEqualTo(MEMBER_ID);
-        verify(paymentRepository, never()).findTopByMemberIdOrderByPeriodCoveredDesc(OTHER_MEMBER_ID);
+        assertThat(report).isEmpty();
+        verifyNoInteractions(paymentRepository);
     }
 
     @Test
@@ -245,8 +264,8 @@ class PaymentServiceTest {
         LocalDate today = LocalDate.now();
         LocalDate lastPeriod = today.minusMonths(2).withDayOfMonth(1);
         long expectedDaysOverdue = ChronoUnit.DAYS.between(lastPeriod.plusMonths(1), today);
-        when(memberRepository.findByClubIdOrderByCreatedAtDesc(CLUB_ID)).thenReturn(List.of(member(MEMBER_ID, null)));
-        when(paymentRepository.findTopByMemberIdOrderByPeriodCoveredDesc(MEMBER_ID)).thenReturn(Optional.of(payment(MEMBER_ID, lastPeriod)));
+        stubActiveMembers(member(MEMBER_ID, null));
+        when(paymentRepository.findLastPaidPeriodByMemberIds(any())).thenReturn(List.of(lastPaidPeriod(MEMBER_ID, lastPeriod)));
 
         List<MemberDelinquencyResponse> report = paymentService.listMemberDelinquency(CLUB_ID);
 
@@ -261,8 +280,8 @@ class PaymentServiceTest {
         long expectedDaysOverdue = ChronoUnit.DAYS.between(joinedAt.withDayOfMonth(1), today);
         Member neverPaidMember = member(MEMBER_ID, null);
         neverPaidMember.setJoinedAt(joinedAt);
-        when(memberRepository.findByClubIdOrderByCreatedAtDesc(CLUB_ID)).thenReturn(List.of(neverPaidMember));
-        when(paymentRepository.findTopByMemberIdOrderByPeriodCoveredDesc(MEMBER_ID)).thenReturn(Optional.empty());
+        stubActiveMembers(neverPaidMember);
+        when(paymentRepository.findLastPaidPeriodByMemberIds(any())).thenReturn(List.of());
 
         List<MemberDelinquencyResponse> report = paymentService.listMemberDelinquency(CLUB_ID);
 
@@ -273,13 +292,30 @@ class PaymentServiceTest {
     @Test
     void shouldReportZeroDaysOverdueWhenLastPaymentCoversAFuturePeriod() {
         LocalDate futurePeriod = LocalDate.now().plusMonths(1).withDayOfMonth(1);
-        when(memberRepository.findByClubIdOrderByCreatedAtDesc(CLUB_ID)).thenReturn(List.of(member(MEMBER_ID, null)));
-        when(paymentRepository.findTopByMemberIdOrderByPeriodCoveredDesc(MEMBER_ID))
-                .thenReturn(Optional.of(payment(MEMBER_ID, futurePeriod)));
+        stubActiveMembers(member(MEMBER_ID, null));
+        when(paymentRepository.findLastPaidPeriodByMemberIds(any())).thenReturn(List.of(lastPaidPeriod(MEMBER_ID, futurePeriod)));
 
         List<MemberDelinquencyResponse> report = paymentService.listMemberDelinquency(CLUB_ID);
 
         assertThat(report.get(0).daysOverdue()).isZero();
+    }
+
+    private void stubActiveMembers(Member... members) {
+        when(memberRepository.findByClubIdAndStatusOrderByCreatedAtDesc(CLUB_ID, MemberStatus.ACTIVE)).thenReturn(List.of(members));
+    }
+
+    private MemberLastPaidPeriod lastPaidPeriod(Long memberId, LocalDate lastPeriodCovered) {
+        return new MemberLastPaidPeriod() {
+            @Override
+            public Long getMemberId() {
+                return memberId;
+            }
+
+            @Override
+            public LocalDate getLastPeriodCovered() {
+                return lastPeriodCovered;
+            }
+        };
     }
 
     private Member member(Long id, Long familyGroupId) {

@@ -10,16 +10,19 @@ import com.lazzariniingenieria.clubmanagementapi.exception.DuplicatePeriodCovere
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaidByMemberNotInFamilyGroupException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.PaymentMapper;
+import com.lazzariniingenieria.clubmanagementapi.repository.MemberLastPaidPeriod;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.PaymentRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Slf4j
 public class PaymentService {
+
+    private static final int AMOUNT_SCALE = 2;
 
     private final PaymentRepository paymentRepository;
     private final MemberRepository memberRepository;
@@ -56,12 +61,15 @@ public class PaymentService {
     }
 
     public List<MemberDelinquencyResponse> listMemberDelinquency(Long clubId) {
-        List<Member> members = memberRepository.findByClubIdOrderByCreatedAtDesc(clubId);
-        List<MemberDelinquencyResponse> report = members.stream()
-                .filter(member -> member.getStatus() == MemberStatus.ACTIVE)
-                .map(this::toDelinquencyResponse)
-                .sorted(Comparator.comparingLong(MemberDelinquencyResponse::daysOverdue).reversed())
-                .toList();
+        List<Member> members = memberRepository.findByClubIdAndStatusOrderByCreatedAtDesc(clubId, MemberStatus.ACTIVE);
+        Map<Long, LocalDate> lastPaidPeriods = findLastPaidPeriods(members);
+        List<MemberDelinquencyResponse> report = new ArrayList<>();
+
+        for (Member member : members) {
+            report.add(toDelinquencyResponse(member, lastPaidPeriods.get(member.getId())));
+        }
+
+        report.sort(Comparator.comparingLong(MemberDelinquencyResponse::daysOverdue).reversed());
 
         return report;
     }
@@ -74,7 +82,7 @@ public class PaymentService {
             Payment payment = Payment.builder()
                     .memberId(request.memberId())
                     .paidByMemberId(paidByMemberId)
-                    .amount(request.amount())
+                    .amount(request.amount().setScale(AMOUNT_SCALE, RoundingMode.UNNECESSARY))
                     .paidAt(now)
                     .periodCovered(periodCovered)
                     .paymentMethod(request.paymentMethod())
@@ -87,13 +95,31 @@ public class PaymentService {
         return payments;
     }
 
-    private MemberDelinquencyResponse toDelinquencyResponse(Member member) {
-        Optional<Payment> lastPayment = paymentRepository.findTopByMemberIdOrderByPeriodCoveredDesc(member.getId());
-        LocalDate coverageStart = lastPayment
-                .map(payment -> payment.getPeriodCovered().plusMonths(1))
-                .orElseGet(() -> member.getJoinedAt().withDayOfMonth(1));
+    private Map<Long, LocalDate> findLastPaidPeriods(List<Member> members) {
+        Map<Long, LocalDate> lastPaidPeriods = new HashMap<>();
+
+        if (members.isEmpty()) {
+            return lastPaidPeriods;
+        }
+
+        List<Long> memberIds = new ArrayList<>();
+
+        for (Member member : members) {
+            memberIds.add(member.getId());
+        }
+
+        for (MemberLastPaidPeriod lastPaidPeriod : paymentRepository.findLastPaidPeriodByMemberIds(memberIds)) {
+            lastPaidPeriods.put(lastPaidPeriod.getMemberId(), lastPaidPeriod.getLastPeriodCovered());
+        }
+
+        return lastPaidPeriods;
+    }
+
+    private MemberDelinquencyResponse toDelinquencyResponse(Member member, LocalDate lastPeriodCovered) {
+        LocalDate coverageStart = lastPeriodCovered != null
+                ? lastPeriodCovered.plusMonths(1)
+                : member.getJoinedAt().withDayOfMonth(1);
         long daysOverdue = Math.max(0, ChronoUnit.DAYS.between(coverageStart, LocalDate.now()));
-        LocalDate lastPeriodCovered = lastPayment.map(Payment::getPeriodCovered).orElse(null);
 
         return new MemberDelinquencyResponse(member.getId(), member.getFirstName(), member.getLastName(), lastPeriodCovered,
                 daysOverdue);
@@ -104,9 +130,7 @@ public class PaymentService {
             return null;
         }
 
-        Member paidByMember = memberRepository
-                .findByIdAndClubId(paidByMemberId, clubId)
-                .orElseThrow(() -> new MemberNotFoundException(paidByMemberId));
+        Member paidByMember = findMemberOrThrow(clubId, paidByMemberId);
         boolean sameFamilyGroup = member.getFamilyGroupId() != null
                 && member.getFamilyGroupId().equals(paidByMember.getFamilyGroupId());
 

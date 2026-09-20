@@ -1,7 +1,9 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -29,6 +31,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -70,6 +73,54 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$[0].memberId", is(1)))
                 .andExpect(jsonPath("$[0].amount", is(15000)))
                 .andExpect(jsonPath("$[0].paymentMethod", is("CASH")));
+    }
+
+    @Test
+    void shouldReturnCreatedPaymentsWhenRequesterIsSuperAdmin() throws Exception {
+        String requestBody = readFixture("record-payment-request-valid.json");
+        when(paymentService.recordPayment(any(AuthenticatedUser.class), any(RecordPaymentRequest.class)))
+                .thenReturn(List.of(paymentResponse()));
+
+        mockMvc.perform(post("/api/payments")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void shouldPassEveryPeriodCoveredToTheServiceWhenMultiplePeriodsAreSent() throws Exception {
+        String requestBody = readFixture("record-payment-request-multiple-periods.json");
+        when(paymentService.recordPayment(any(AuthenticatedUser.class), any(RecordPaymentRequest.class)))
+                .thenReturn(List.of(paymentResponse(), paymentResponse()));
+
+        mockMvc.perform(post("/api/payments")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()", is(2)));
+
+        ArgumentCaptor<RecordPaymentRequest> requestCaptor = ArgumentCaptor.forClass(RecordPaymentRequest.class);
+        verify(paymentService).recordPayment(any(AuthenticatedUser.class), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().periodsCovered())
+                .containsExactly(LocalDate.parse("2026-06-01"), LocalDate.parse("2026-07-01"));
+    }
+
+    @Test
+    void shouldReturnPaymentHistoryWhenRequesterIsSuperAdmin() throws Exception {
+        when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID)).thenReturn(List.of(paymentResponse()));
+
+        mockMvc.perform(get("/api/payments/members/{memberId}", MEMBER_ID).with(asSuperAdmin()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldReturnDelinquencyReportWhenRequesterIsSuperAdmin() throws Exception {
+        when(paymentService.listMemberDelinquency(CLUB_ID)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/payments/delinquency").with(asSuperAdmin()))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -214,6 +265,13 @@ class PaymentControllerTest {
     private PaymentResponse paymentResponse() {
         return new PaymentResponse(10L, MEMBER_ID, null, new BigDecimal("15000"), Instant.parse("2026-07-01T00:00:00Z"),
                 LocalDate.parse("2026-07-01"), PaymentMethod.CASH, 5L, Instant.parse("2026-07-01T00:00:00Z"));
+    }
+
+    private RequestPostProcessor asSuperAdmin() {
+        AuthenticatedUser principal = new AuthenticatedUser(1L, CLUB_ID, UserRole.SUPER_ADMIN, null);
+
+        return authentication(new UsernamePasswordAuthenticationToken(principal, null,
+                List.of(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))));
     }
 
     private RequestPostProcessor asAdmin() {
