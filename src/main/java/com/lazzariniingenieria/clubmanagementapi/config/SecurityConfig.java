@@ -32,6 +32,7 @@ public class SecurityConfig {
         http.authorizeHttpRequests(authorize -> authorize
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/refresh").permitAll()
+                .requestMatchers(HttpMethod.PATCH, "/api/admins/*/password").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/admins/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/members/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/family-groups/**").hasAnyRole("SUPER_ADMIN", "ADMIN")

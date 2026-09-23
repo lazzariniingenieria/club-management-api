@@ -251,13 +251,32 @@ class AdminControllerTest {
     }
 
     @Test
-    void shouldReturnForbiddenWhenAdminTriesToResetAPassword() throws Exception {
+    void shouldResetAdminPasswordWhenRequesterIsAdmin() throws Exception {
         String requestBody = readFixture("reset-admin-password-request-valid.json");
+        when(adminService.resetPassword(any(AuthenticatedUser.class), eq(ADMIN_ID), any(ResetAdminPasswordRequest.class)))
+                .thenReturn(adminResponse());
 
         mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
                         .with(asAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenMemberTriesToResetAPassword() throws Exception {
+        String requestBody = readFixture("reset-admin-password-request-valid.json");
+
+        mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
+                        .with(asMember())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldStillRejectAdminOnTheRestOfTheAdminEndpoints() throws Exception {
+        mockMvc.perform(get("/api/admins/{adminId}", ADMIN_ID).with(asAdmin()))
                 .andExpect(status().isForbidden());
     }
 
@@ -278,6 +297,13 @@ class AdminControllerTest {
 
         return authentication(new UsernamePasswordAuthenticationToken(principal, null,
                 List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
+    }
+
+    private RequestPostProcessor asMember() {
+        AuthenticatedUser principal = new AuthenticatedUser(3L, CLUB_ID, UserRole.MEMBER, 9L);
+
+        return authentication(new UsernamePasswordAuthenticationToken(principal, null,
+                List.of(new SimpleGrantedAuthority("ROLE_MEMBER"))));
     }
 
     private String readFixture(String fileName) throws IOException {
