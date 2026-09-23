@@ -12,6 +12,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     boolean existsByClubIdAndDniAndIdNot(Long clubId, String dni, Long id);
 
+    boolean existsByIdAndClubId(Long id, Long clubId);
+
     Optional<Member> findByIdAndClubId(Long id, Long clubId);
 
     List<Member> findByClubIdOrderByCreatedAtDesc(Long clubId);

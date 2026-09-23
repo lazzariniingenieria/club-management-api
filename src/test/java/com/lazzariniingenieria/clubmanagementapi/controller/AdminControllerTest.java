@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
 import com.lazzariniingenieria.clubmanagementapi.dto.AdminResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateAdminRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ResetAdminPasswordRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundException;
@@ -207,6 +208,57 @@ class AdminControllerTest {
         mockMvc.perform(patch("/api/admins/{adminId}/reactivate", ADMIN_ID).with(asSuperAdmin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.active", is(true)));
+    }
+
+    @Test
+    void shouldResetAdminPasswordWhenRequesterIsSuperAdmin() throws Exception {
+        String requestBody = readFixture("reset-admin-password-request-valid.json");
+        when(adminService.resetPassword(any(AuthenticatedUser.class), eq(ADMIN_ID), any(ResetAdminPasswordRequest.class)))
+                .thenReturn(adminResponse());
+
+        mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(10)))
+                .andExpect(jsonPath("$.newPassword").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenNewPasswordIsTooShort() throws Exception {
+        String requestBody = readFixture("reset-admin-password-request-too-short.json");
+
+        mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenResettingPasswordOfMissingAdmin() throws Exception {
+        String requestBody = readFixture("reset-admin-password-request-valid.json");
+        when(adminService.resetPassword(any(AuthenticatedUser.class), eq(ADMIN_ID), any(ResetAdminPasswordRequest.class)))
+                .thenThrow(new AdminNotFoundException(ADMIN_ID));
+
+        mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenAdminTriesToResetAPassword() throws Exception {
+        String requestBody = readFixture("reset-admin-password-request-valid.json");
+
+        mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isForbidden());
     }
 
     private AdminResponse adminResponse() {
