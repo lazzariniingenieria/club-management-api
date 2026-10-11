@@ -2,6 +2,7 @@ package com.lazzariniingenieria.clubmanagementapi.controller;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.AdminResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateAdminRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ResetAdminPasswordRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.service.AdminService;
@@ -53,6 +54,15 @@ public class AdminController {
                                                  @PathVariable Long adminId,
                                                  @Valid @RequestBody UpdateAdminRequest request) {
         AdminResponse response = adminService.updateAdmin(currentUser, adminId, request);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{adminId}/password")
+    public ResponseEntity<AdminResponse> resetPassword(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                        @PathVariable Long adminId,
+                                                        @Valid @RequestBody ResetAdminPasswordRequest request) {
+        AdminResponse response = adminService.resetPassword(currentUser, adminId, request);
 
         return ResponseEntity.ok(response);
     }

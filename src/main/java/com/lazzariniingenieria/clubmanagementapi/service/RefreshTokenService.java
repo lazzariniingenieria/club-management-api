@@ -45,6 +45,11 @@ public class RefreshTokenService {
         return rawToken;
     }
 
+    public void revokeActiveTokens(Long userAccountId) {
+        int revokedCount = refreshTokenRepository.revokeActiveTokens(userAccountId, Instant.now());
+        log.info("Revoked {} active refresh token(s) for userAccountId={}", revokedCount, userAccountId);
+    }
+
     public RefreshToken consumeToken(String rawToken) {
         RefreshToken refreshToken = refreshTokenRepository
                 .findByTokenHash(hash(rawToken))

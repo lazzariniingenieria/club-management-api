@@ -3,6 +3,7 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -101,6 +102,15 @@ class RefreshTokenServiceTest {
 
         assertThatThrownBy(() -> refreshTokenService.consumeToken("some-token"))
                 .isInstanceOf(InvalidRefreshTokenException.class);
+    }
+
+    @Test
+    void shouldRevokeEveryActiveTokenOfTheUser() {
+        when(refreshTokenRepository.revokeActiveTokens(eq(USER_ACCOUNT_ID), any(Instant.class))).thenReturn(3);
+
+        refreshTokenService.revokeActiveTokens(USER_ACCOUNT_ID);
+
+        verify(refreshTokenRepository).revokeActiveTokens(eq(USER_ACCOUNT_ID), any(Instant.class));
     }
 
     private RefreshToken validRefreshToken(String tokenHash) {

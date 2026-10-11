@@ -2,12 +2,15 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.AdminResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateAdminRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ResetAdminPasswordRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapper;
+import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
@@ -16,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +29,8 @@ public class AdminService {
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final AdminMapper adminMapper;
+    private final MemberRepository memberRepository;
+    private final RefreshTokenService refreshTokenService;
 
     public AdminResponse createAdmin(AuthenticatedUser currentUser, CreateAdminRequest request) {
         Long clubId = currentUser.clubId();
@@ -33,6 +39,8 @@ public class AdminService {
         if (dniInUse) {
             throw new DuplicateDniException(request.dni());
         }
+
+        validateMemberBelongsToClub(clubId, request.memberId());
 
         Instant now = Instant.now();
         UserAccount admin = UserAccount.builder()
@@ -75,6 +83,8 @@ public class AdminService {
             throw new DuplicateDniException(request.dni());
         }
 
+        validateMemberBelongsToClub(clubId, request.memberId());
+
         admin.setDni(request.dni());
         admin.setEmail(request.email());
         admin.setMemberId(request.memberId());
@@ -108,6 +118,32 @@ public class AdminService {
         log.info("Reactivated admin userAccountId={} for clubId={}", adminId, clubId);
 
         return adminMapper.toResponse(savedAdmin);
+    }
+
+    @Transactional
+    public AdminResponse resetPassword(AuthenticatedUser currentUser, Long adminId, ResetAdminPasswordRequest request) {
+        Long clubId = currentUser.clubId();
+        UserAccount admin = findAdminOrThrow(clubId, adminId);
+        admin.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        markUpdated(admin, currentUser.userAccountId());
+
+        UserAccount savedAdmin = userAccountRepository.save(admin);
+        refreshTokenService.revokeActiveTokens(adminId);
+        log.info("Reset password for admin userAccountId={} in clubId={}", adminId, clubId);
+
+        return adminMapper.toResponse(savedAdmin);
+    }
+
+    private void validateMemberBelongsToClub(Long clubId, Long memberId) {
+        if (memberId == null) {
+            return;
+        }
+
+        boolean memberExists = memberRepository.existsByIdAndClubId(memberId, clubId);
+
+        if (!memberExists) {
+            throw new MemberNotFoundException(memberId);
+        }
     }
 
     private void markUpdated(UserAccount admin, Long actingUserId) {
