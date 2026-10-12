@@ -37,6 +37,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/members/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/family-groups/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/payments/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/clubs/me").hasRole("SUPER_ADMIN")
+                .requestMatchers("/api/clubs/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .anyRequest().authenticated());
         http.addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
 

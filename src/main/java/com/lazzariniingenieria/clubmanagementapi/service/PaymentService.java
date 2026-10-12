@@ -2,17 +2,23 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
+import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.VoidPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.Payment;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicatePeriodCoveredException;
+import com.lazzariniingenieria.clubmanagementapi.exception.InvalidDateRangeException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaidByMemberNotInFamilyGroupException;
+import com.lazzariniingenieria.clubmanagementapi.exception.PaymentAlreadyVoidedException;
+import com.lazzariniingenieria.clubmanagementapi.exception.PaymentNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.PaymentMapper;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberLastPaidPeriod;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.PaymentRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.PaymentSearchSpecification;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -25,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +41,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class PaymentService {
 
     private static final int AMOUNT_SCALE = 2;
+    private static final Sort MOST_RECENTLY_PAID_FIRST = Sort.by(Sort.Order.desc("paidAt"), Sort.Order.desc("periodCovered"),
+            Sort.Order.desc("id"));
 
     private final PaymentRepository paymentRepository;
     private final MemberRepository memberRepository;
@@ -53,11 +62,39 @@ public class PaymentService {
         return paymentMapper.toResponseList(savedPayments);
     }
 
-    public List<PaymentResponse> listPaymentsForMember(Long clubId, Long memberId) {
+    public List<PaymentResponse> listPaymentsForMember(Long clubId, Long memberId, boolean includeVoided) {
         findMemberOrThrow(clubId, memberId);
-        List<Payment> payments = paymentRepository.findByMemberIdOrderByPeriodCoveredDesc(memberId);
+        List<Payment> payments = includeVoided
+                ? paymentRepository.findByMemberIdOrderByPeriodCoveredDesc(memberId)
+                : paymentRepository.findByMemberIdAndVoidedAtIsNullOrderByPeriodCoveredDesc(memberId);
 
         return paymentMapper.toResponseList(payments);
+    }
+
+    public List<PaymentResponse> searchPayments(Long clubId, PaymentSearchRequest filter) {
+        validateDateRange(filter.from(), filter.to());
+        PaymentSearchSpecification specification = new PaymentSearchSpecification(clubId, filter);
+        List<Payment> payments = paymentRepository.findAll(specification, MOST_RECENTLY_PAID_FIRST);
+
+        return paymentMapper.toResponseList(payments);
+    }
+
+    @Transactional
+    public PaymentResponse voidPayment(AuthenticatedUser currentUser, Long paymentId, VoidPaymentRequest request) {
+        Payment payment = findPaymentForUpdateOrThrow(currentUser.clubId(), paymentId);
+
+        if (payment.isVoided()) {
+            throw new PaymentAlreadyVoidedException(paymentId);
+        }
+
+        payment.setVoidedAt(Instant.now());
+        payment.setVoidedByUserId(currentUser.userAccountId());
+        payment.setVoidReason(normalizeVoidReason(request));
+        Payment savedPayment = paymentRepository.save(payment);
+        log.info("Voided paymentId={} (memberId={}, periodCovered={}, amount={}) in clubId={} by userAccountId={}", paymentId,
+                payment.getMemberId(), payment.getPeriodCovered(), payment.getAmount(), currentUser.clubId(), currentUser.userAccountId());
+
+        return paymentMapper.toResponse(savedPayment);
     }
 
     public List<MemberDelinquencyResponse> listMemberDelinquency(Long clubId) {
@@ -147,6 +184,30 @@ public class PaymentService {
         if (distinctCount != periodsCovered.size()) {
             throw new DuplicatePeriodCoveredException();
         }
+    }
+
+    private void validateDateRange(LocalDate from, LocalDate to) {
+        boolean bothBoundsPresent = from != null && to != null;
+
+        if (bothBoundsPresent && from.isAfter(to)) {
+            throw new InvalidDateRangeException(from, to);
+        }
+    }
+
+    private String normalizeVoidReason(VoidPaymentRequest request) {
+        boolean hasReason = request != null && request.reason() != null && !request.reason().isBlank();
+
+        if (!hasReason) {
+            return null;
+        }
+
+        return request.reason().strip();
+    }
+
+    private Payment findPaymentForUpdateOrThrow(Long clubId, Long paymentId) {
+        return paymentRepository
+                .findByIdAndClubIdForUpdate(paymentId, clubId)
+                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
     }
 
     private Member findMemberOrThrow(Long clubId, Long memberId) {

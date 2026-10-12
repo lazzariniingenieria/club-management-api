@@ -13,6 +13,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 @Slf4j
@@ -79,6 +80,42 @@ public class GlobalExceptionHandler {
         log.warn("Rejected payment due to duplicate periods covered: {}", exception.getMessage());
 
         return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(PaymentNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handlePaymentNotFound(PaymentNotFoundException exception) {
+        log.warn("Payment lookup failed: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(PaymentAlreadyVoidedException.class)
+    public ResponseEntity<ApiErrorDto> handlePaymentAlreadyVoided(PaymentAlreadyVoidedException exception) {
+        log.warn("Rejected void of an already voided payment: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ClubNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handleClubNotFound(ClubNotFoundException exception) {
+        log.error("Club from a valid token has no club row: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(InvalidDateRangeException.class)
+    public ResponseEntity<ApiErrorDto> handleInvalidDateRange(InvalidDateRangeException exception) {
+        log.warn("Rejected request with an invalid date range: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorDto> handleArgumentTypeMismatch(MethodArgumentTypeMismatchException exception) {
+        log.warn("Rejected request with an unparseable parameter '{}': {}", exception.getName(), exception.getValue());
+        String message = "Invalid value for parameter " + exception.getName();
+
+        return buildResponse(HttpStatus.BAD_REQUEST, message, List.of());
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

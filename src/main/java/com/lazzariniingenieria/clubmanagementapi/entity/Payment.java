@@ -55,4 +55,17 @@ public class Payment {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @Column(name = "voided_at")
+    private Instant voidedAt;
+
+    @Column(name = "voided_by_user_id")
+    private Long voidedByUserId;
+
+    @Column(name = "void_reason", length = 150)
+    private String voidReason;
+
+    public boolean isVoided() {
+        return voidedAt != null;
+    }
 }
