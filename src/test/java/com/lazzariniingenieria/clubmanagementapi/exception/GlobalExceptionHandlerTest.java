@@ -86,6 +86,20 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldHideConversionInternalsWhenAFieldFailsToBind() {
+        FieldError bindingFailure = new FieldError("paymentSearchRequest", "paymentMethod", "CHEQUE", true, null, null,
+                "Failed to convert value of type 'java.lang.String' to required type 'com.example.PaymentMethod'");
+        BindingResult bindingResult = mock(BindingResult.class);
+        when(bindingResult.getFieldErrors()).thenReturn(List.of(bindingFailure));
+        MethodArgumentNotValidException exception = new MethodArgumentNotValidException(mock(MethodParameter.class), bindingResult);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleValidation(exception);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().details()).containsExactly("paymentMethod: invalid value");
+    }
+
+    @Test
     void shouldReturnEmptyDetailsWhenValidationFailsWithNoFieldErrors() {
         BindingResult bindingResult = mock(BindingResult.class);
         when(bindingResult.getFieldErrors()).thenReturn(List.of());

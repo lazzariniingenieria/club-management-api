@@ -310,7 +310,8 @@ class PaymentControllerTest {
         mockMvc.perform(get("/api/payments")
                         .with(asAdmin())
                         .param("paymentMethod", "CHEQUE"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]", is("paymentMethod: invalid value")));
 
         verify(paymentService, never()).searchPayments(any(), any());
     }

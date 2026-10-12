@@ -19,6 +19,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @Slf4j
 public class GlobalExceptionHandler {
 
+    private static final String INVALID_VALUE_MESSAGE = "invalid value";
+
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ApiErrorDto> handleInvalidCredentials(InvalidCredentialsException exception) {
         log.warn("Login attempt rejected: {}", exception.getMessage());
@@ -132,7 +134,7 @@ public class GlobalExceptionHandler {
 
         for (FieldError fieldError : fieldErrors) {
             String fieldName = fieldError.getField();
-            String errorMessage = fieldError.getDefaultMessage();
+            String errorMessage = fieldError.isBindingFailure() ? INVALID_VALUE_MESSAGE : fieldError.getDefaultMessage();
             String detail = fieldName + ": " + errorMessage;
             details.add(detail);
         }
