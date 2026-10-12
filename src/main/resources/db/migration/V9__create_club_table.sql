@@ -6,8 +6,15 @@ CREATE TABLE club (
     member_app_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     monthly_fee_amount NUMERIC(10, 2),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by_user_id BIGINT,
+    CONSTRAINT fk_club_updated_by FOREIGN KEY (updated_by_user_id) REFERENCES user_account(id),
     CONSTRAINT ck_club_monthly_fee_amount_positive CHECK (monthly_fee_amount IS NULL OR monthly_fee_amount > 0)
 );
+
+-- No created_by_user_id, unlike the other root tables in V5: a club is seeded in the database before any user_account
+-- of its own exists, so the column could never be filled.
+CREATE INDEX idx_club_updated_by_user_id ON club(updated_by_user_id);
 
 -- Every club_id already stored on a root table gets a club row, so the foreign keys added in V10 cannot fail on
 -- existing data. Club 1 is the only one expected; the name is a placeholder to be set per environment.

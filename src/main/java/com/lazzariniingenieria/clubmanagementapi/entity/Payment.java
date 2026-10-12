@@ -64,8 +64,4 @@ public class Payment {
 
     @Column(name = "void_reason", length = 150)
     private String voidReason;
-
-    public boolean isVoided() {
-        return voidedAt != null;
-    }
 }

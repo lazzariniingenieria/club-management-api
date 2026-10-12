@@ -303,7 +303,6 @@ class PaymentControllerTest {
         ArgumentCaptor<PaymentSearchRequest> filterCaptor = ArgumentCaptor.forClass(PaymentSearchRequest.class);
         verify(paymentService).searchPayments(eq(CLUB_ID), filterCaptor.capture());
         assertThat(filterCaptor.getValue()).isEqualTo(new PaymentSearchRequest(null, null, null, null, null));
-        assertThat(filterCaptor.getValue().includesVoided()).isFalse();
     }
 
     @Test

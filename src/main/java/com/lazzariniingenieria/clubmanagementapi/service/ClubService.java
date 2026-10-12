@@ -9,10 +9,10 @@ import com.lazzariniingenieria.clubmanagementapi.repository.ClubRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -30,13 +30,13 @@ public class ClubService {
         return clubMapper.toResponse(club);
     }
 
-    @Transactional
     public ClubResponse updateMonthlyFee(AuthenticatedUser currentUser, UpdateClubMonthlyFeeRequest request) {
         Club club = findClubOrThrow(currentUser.clubId());
         BigDecimal previousAmount = club.getMonthlyFeeAmount();
         BigDecimal newAmount = normalizeAmount(request.monthlyFeeAmount());
 
         club.setMonthlyFeeAmount(newAmount);
+        markUpdated(club, currentUser.userAccountId());
         Club savedClub = clubRepository.save(club);
         log.info("Monthly fee of clubId={} changed from {} to {} by userAccountId={}", club.getId(), previousAmount, newAmount,
                 currentUser.userAccountId());
@@ -50,6 +50,11 @@ public class ClubService {
         }
 
         return amount.setScale(AMOUNT_SCALE, RoundingMode.UNNECESSARY);
+    }
+
+    private void markUpdated(Club club, Long actingUserId) {
+        club.setUpdatedAt(Instant.now());
+        club.setUpdatedByUserId(actingUserId);
     }
 
     private Club findClubOrThrow(Long clubId) {

@@ -43,7 +43,9 @@ public class PaymentSearchSpecification implements Specification<Payment> {
     }
 
     private void addStatusAndMemberFilters(Root<Payment> payment, CriteriaBuilder builder, List<Predicate> predicates) {
-        if (!filter.includesVoided()) {
+        boolean includeVoided = Boolean.TRUE.equals(filter.includeVoided());
+
+        if (!includeVoided) {
             predicates.add(builder.isNull(payment.get("voidedAt")));
         }
 

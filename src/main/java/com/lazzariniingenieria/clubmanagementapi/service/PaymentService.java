@@ -82,8 +82,9 @@ public class PaymentService {
     @Transactional
     public PaymentResponse voidPayment(AuthenticatedUser currentUser, Long paymentId, VoidPaymentRequest request) {
         Payment payment = findPaymentForUpdateOrThrow(currentUser.clubId(), paymentId);
+        boolean alreadyVoided = payment.getVoidedAt() != null;
 
-        if (payment.isVoided()) {
+        if (alreadyVoided) {
             throw new PaymentAlreadyVoidedException(paymentId);
         }
 

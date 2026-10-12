@@ -2,9 +2,10 @@ package com.lazzariniingenieria.clubmanagementapi.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
@@ -17,9 +18,11 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import java.time.LocalDate;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -59,41 +62,35 @@ class PaymentSearchSpecificationTest {
     private Path<Object> paymentMethodPath;
 
     @Mock
+    private Path<Long> memberIdPath;
+
+    @Mock
     private Path<Object> memberClubIdPath;
-
-    @Mock
-    private Predicate belongsToClub;
-
-    @Mock
-    private Predicate notVoided;
-
-    @Mock
-    private Predicate matchesMember;
-
-    @Mock
-    private Predicate fromPeriod;
-
-    @Mock
-    private Predicate toPeriod;
-
-    @Mock
-    private Predicate matchesMethod;
 
     @Mock
     private Predicate combined;
 
     @BeforeEach
     void setUp() {
-        stubPaths();
-        stubPredicates();
+        Map<String, Path<?>> paymentPaths = Map.of("memberId", paymentMemberIdPath, "voidedAt", voidedAtPath, "periodCovered",
+                periodCoveredPath, "paymentMethod", paymentMethodPath);
+        Map<String, Path<?>> memberPaths = Map.of("id", memberIdPath, "clubId", memberClubIdPath);
+        when(payment.get(anyString())).thenAnswer(invocation -> paymentPaths.get(invocation.getArgument(0)));
+        when(member.get(anyString())).thenAnswer(invocation -> memberPaths.get(invocation.getArgument(0)));
+        when(query.subquery(Long.class)).thenReturn(clubMemberIds);
+        when(clubMemberIds.from(Member.class)).thenReturn(member);
+        when(builder.and(any(Predicate[].class))).thenReturn(combined);
     }
 
     @Test
     void shouldScopeToClubAndExcludeVoidedPaymentsWhenNoFilterIsGiven() {
         Predicate result = toPredicate(new PaymentSearchRequest(null, null, null, null, false));
 
+        verify(clubMemberIds).select(memberIdPath);
         verify(builder).equal(memberClubIdPath, CLUB_ID);
-        verify(builder).and(new Predicate[] {belongsToClub, notVoided});
+        verify(paymentMemberIdPath).in(clubMemberIds);
+        verify(builder).isNull(voidedAtPath);
+        assertThat(combinedPredicateCount()).isEqualTo(2);
         assertThat(result).isSameAs(combined);
     }
 
@@ -101,7 +98,7 @@ class PaymentSearchSpecificationTest {
     void shouldTreatMissingIncludeVoidedAsExcludingVoidedPayments() {
         toPredicate(new PaymentSearchRequest(null, null, null, null, null));
 
-        verify(builder).and(new Predicate[] {belongsToClub, notVoided});
+        verify(builder).isNull(voidedAtPath);
     }
 
     @Test
@@ -109,37 +106,45 @@ class PaymentSearchSpecificationTest {
         toPredicate(new PaymentSearchRequest(null, null, null, null, true));
 
         verify(builder, never()).isNull(any());
-        verify(builder).and(belongsToClub);
+        assertThat(combinedPredicateCount()).isEqualTo(1);
     }
 
     @Test
     void shouldCombineEveryFilterWhenAllAreGiven() {
         toPredicate(new PaymentSearchRequest(MEMBER_ID, FROM, TO, PaymentMethod.CASH, false));
 
-        verify(builder).and(belongsToClub, notVoided, matchesMember, fromPeriod, toPeriod, matchesMethod);
+        verify(builder).equal(paymentMemberIdPath, MEMBER_ID);
+        verify(builder).greaterThanOrEqualTo(periodCoveredPath, FROM);
+        verify(builder).lessThanOrEqualTo(periodCoveredPath, TO);
+        verify(builder).equal(paymentMethodPath, PaymentMethod.CASH);
+        assertThat(combinedPredicateCount()).isEqualTo(6);
     }
 
     @Test
     void shouldCombineMemberAndDateRangeWithoutFilteringByMethod() {
         toPredicate(new PaymentSearchRequest(MEMBER_ID, FROM, TO, null, false));
 
-        verify(builder).and(belongsToClub, notVoided, matchesMember, fromPeriod, toPeriod);
+        verify(builder, never()).equal(paymentMethodPath, PaymentMethod.CASH);
+        verify(builder, never()).equal(paymentMethodPath, PaymentMethod.TRANSFER);
+        assertThat(combinedPredicateCount()).isEqualTo(5);
     }
 
     @Test
     void shouldApplyOnlyTheLowerPeriodBoundWhenToIsMissing() {
         toPredicate(new PaymentSearchRequest(null, FROM, null, null, false));
 
+        verify(builder).greaterThanOrEqualTo(periodCoveredPath, FROM);
         verify(builder, never()).lessThanOrEqualTo(any(), any(LocalDate.class));
-        verify(builder).and(belongsToClub, notVoided, fromPeriod);
+        assertThat(combinedPredicateCount()).isEqualTo(3);
     }
 
     @Test
     void shouldCombineMethodWithVoidedPaymentsWhenBothAreRequested() {
         toPredicate(new PaymentSearchRequest(null, null, TO, PaymentMethod.TRANSFER, true));
 
+        verify(builder).lessThanOrEqualTo(periodCoveredPath, TO);
         verify(builder).equal(paymentMethodPath, PaymentMethod.TRANSFER);
-        verify(builder).and(belongsToClub, toPeriod, matchesMethod);
+        assertThat(combinedPredicateCount()).isEqualTo(3);
     }
 
     private Predicate toPredicate(PaymentSearchRequest filter) {
@@ -148,24 +153,10 @@ class PaymentSearchSpecificationTest {
         return specification.toPredicate(payment, query, builder);
     }
 
-    private void stubPaths() {
-        lenient().when(payment.get("memberId")).thenReturn(paymentMemberIdPath);
-        lenient().when(payment.get("voidedAt")).thenReturn(voidedAtPath);
-        lenient().when(payment.<LocalDate>get("periodCovered")).thenReturn(periodCoveredPath);
-        lenient().when(payment.get("paymentMethod")).thenReturn(paymentMethodPath);
-        lenient().when(query.subquery(Long.class)).thenReturn(clubMemberIds);
-        lenient().when(clubMemberIds.from(Member.class)).thenReturn(member);
-        lenient().when(member.get("clubId")).thenReturn(memberClubIdPath);
-        lenient().when(paymentMemberIdPath.in(clubMemberIds)).thenReturn(belongsToClub);
-    }
+    private int combinedPredicateCount() {
+        ArgumentCaptor<Predicate[]> predicatesCaptor = ArgumentCaptor.forClass(Predicate[].class);
+        verify(builder).and(predicatesCaptor.capture());
 
-    private void stubPredicates() {
-        lenient().when(builder.isNull(voidedAtPath)).thenReturn(notVoided);
-        lenient().when(builder.equal(paymentMemberIdPath, MEMBER_ID)).thenReturn(matchesMember);
-        lenient().when(builder.greaterThanOrEqualTo(periodCoveredPath, FROM)).thenReturn(fromPeriod);
-        lenient().when(builder.lessThanOrEqualTo(periodCoveredPath, TO)).thenReturn(toPeriod);
-        lenient().when(builder.equal(paymentMethodPath, PaymentMethod.CASH)).thenReturn(matchesMethod);
-        lenient().when(builder.equal(paymentMethodPath, PaymentMethod.TRANSFER)).thenReturn(matchesMethod);
-        lenient().when(builder.and(any(Predicate[].class))).thenReturn(combined);
+        return predicatesCaptor.getValue().length;
     }
 }

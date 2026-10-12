@@ -8,9 +8,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
 
-// The suite never runs a database (see CLAUDE.md), so this checks the migration scripts statically for what would break a
-// deploy: an FK added before its referenced rows exist, or an identity sequence left behind explicitly inserted ids.
-// The linked rows themselves are verified manually against the test environment after deploy.
 class ClubMigrationScriptTest {
 
     private static final String CREATE_CLUB_SCRIPT = "db/migration/V9__create_club_table.sql";

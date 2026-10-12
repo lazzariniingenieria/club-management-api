@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -104,7 +105,8 @@ class ClubControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.monthlyFeeAmount", is(15000.00)));
+                .andExpect(jsonPath("$.monthlyFeeAmount", is(15000.00)))
+                .andExpect(jsonPath("$.updatedByUserId", is(1)));
     }
 
     @Test
@@ -171,7 +173,7 @@ class ClubControllerTest {
     }
 
     private ClubResponse clubResponse(BigDecimal monthlyFeeAmount) {
-        return new ClubResponse(CLUB_ID, "Club 1", monthlyFeeAmount);
+        return new ClubResponse(CLUB_ID, "Club 1", monthlyFeeAmount, Instant.parse("2026-10-01T12:00:00Z"), 1L);
     }
 
     private RequestPostProcessor asSuperAdmin() {

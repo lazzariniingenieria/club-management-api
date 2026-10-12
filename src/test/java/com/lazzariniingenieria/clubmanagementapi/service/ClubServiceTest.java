@@ -17,6 +17,7 @@ import com.lazzariniingenieria.clubmanagementapi.mapper.ClubMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.ClubRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ClubServiceTest {
 
     private static final Long CLUB_ID = 1L;
+    private static final Instant SEEDED_AT = Instant.parse("2026-10-01T12:00:00Z");
     private static final AuthenticatedUser SUPER_ADMIN = new AuthenticatedUser(1L, CLUB_ID, UserRole.SUPER_ADMIN, null);
 
     @Mock
@@ -83,6 +85,18 @@ class ClubServiceTest {
     }
 
     @Test
+    void shouldRecordWhoUpdatedTheMonthlyFeeAndWhen() {
+        Club club = club(null);
+        stubClubForUpdate(club);
+
+        ClubResponse response = clubService.updateMonthlyFee(SUPER_ADMIN, new UpdateClubMonthlyFeeRequest(new BigDecimal("18500")));
+
+        assertThat(club.getUpdatedByUserId()).isEqualTo(SUPER_ADMIN.userAccountId());
+        assertThat(club.getUpdatedAt()).isAfter(SEEDED_AT);
+        assertThat(response.updatedByUserId()).isEqualTo(SUPER_ADMIN.userAccountId());
+    }
+
+    @Test
     void shouldClearMonthlyFeeWhenRequestAmountIsNull() {
         Club club = club(new BigDecimal("15000.00"));
         stubClubForUpdate(club);
@@ -113,6 +127,8 @@ class ClubServiceTest {
                 .id(CLUB_ID)
                 .name("Club 1")
                 .monthlyFeeAmount(monthlyFeeAmount)
+                .createdAt(SEEDED_AT)
+                .updatedAt(SEEDED_AT)
                 .build();
     }
 }

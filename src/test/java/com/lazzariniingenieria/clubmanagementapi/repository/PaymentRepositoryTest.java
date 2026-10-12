@@ -9,8 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
-// No database runs in the test suite, so these tests pin the JPQL contract the money rules depend on: dropping one of
-// these clauses would still compile and pass every mocked service test while silently changing who is in delinquency.
 class PaymentRepositoryTest {
 
     @Test
