@@ -11,22 +11,29 @@ import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
+import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.VoidPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.Payment;
 import com.lazzariniingenieria.clubmanagementapi.entity.PaymentMethod;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicatePeriodCoveredException;
+import com.lazzariniingenieria.clubmanagementapi.exception.InvalidDateRangeException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaidByMemberNotInFamilyGroupException;
+import com.lazzariniingenieria.clubmanagementapi.exception.PaymentAlreadyVoidedException;
+import com.lazzariniingenieria.clubmanagementapi.exception.PaymentNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.PaymentMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.PaymentMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberLastPaidPeriod;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.PaymentRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.PaymentSearchSpecification;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -37,6 +44,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceTest {
@@ -45,6 +53,8 @@ class PaymentServiceTest {
     private static final Long MEMBER_ID = 1L;
     private static final Long OTHER_MEMBER_ID = 2L;
     private static final Long ACTING_USER_ID = 5L;
+    private static final Long OTHER_USER_ID = 6L;
+    private static final Long PAYMENT_ID = 100L;
     private static final BigDecimal AMOUNT = new BigDecimal("15000.00");
     private static final AuthenticatedUser CURRENT_USER = new AuthenticatedUser(ACTING_USER_ID, CLUB_ID, UserRole.ADMIN, null);
 
@@ -205,22 +215,143 @@ class PaymentServiceTest {
     }
 
     @Test
-    void shouldListPaymentsForMemberOrderedByPeriodCoveredDescending() {
+    void shouldListOnlyNonVoidedPaymentsForMemberByDefault() {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
-        when(paymentRepository.findByMemberIdOrderByPeriodCoveredDesc(MEMBER_ID)).thenReturn(List.of(payment(MEMBER_ID,
+        when(paymentRepository.findByMemberIdAndVoidedAtIsNullOrderByPeriodCoveredDesc(MEMBER_ID)).thenReturn(List.of(payment(MEMBER_ID,
                 LocalDate.parse("2026-07-01"))));
 
-        List<PaymentResponse> response = paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID);
+        List<PaymentResponse> response = paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID, false);
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).periodCovered()).isEqualTo(LocalDate.parse("2026-07-01"));
+        verify(paymentRepository, never()).findByMemberIdOrderByPeriodCoveredDesc(any());
+    }
+
+    @Test
+    void shouldListVoidedPaymentsForMemberWhenIncludeVoidedIsRequested() {
+        Payment voidedPayment = voidedPayment(MEMBER_ID, LocalDate.parse("2026-07-01"));
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
+        when(paymentRepository.findByMemberIdOrderByPeriodCoveredDesc(MEMBER_ID)).thenReturn(List.of(voidedPayment));
+
+        List<PaymentResponse> response = paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID, true);
+
+        assertThat(response.get(0).voidedAt()).isEqualTo(voidedPayment.getVoidedAt());
+        verify(paymentRepository, never()).findByMemberIdAndVoidedAtIsNullOrderByPeriodCoveredDesc(any());
     }
 
     @Test
     void shouldThrowMemberNotFoundWhenListingPaymentsForMissingMember() {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID)).isInstanceOf(MemberNotFoundException.class);
+        assertThatThrownBy(() -> paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID, false))
+                .isInstanceOf(MemberNotFoundException.class);
+    }
+
+    @Test
+    void shouldSearchWithEveryCombinedFilterScopedToTheClubOfTheToken() {
+        PaymentSearchRequest filter = new PaymentSearchRequest(MEMBER_ID, LocalDate.parse("2026-01-01"), LocalDate.parse("2026-06-01"),
+                PaymentMethod.TRANSFER, false);
+        when(paymentRepository.findAll(any(PaymentSearchSpecification.class), any(Sort.class))).thenReturn(List.of(payment(MEMBER_ID,
+                LocalDate.parse("2026-03-01"))));
+
+        List<PaymentResponse> response = paymentService.searchPayments(CLUB_ID, filter);
+
+        ArgumentCaptor<PaymentSearchSpecification> specificationCaptor = ArgumentCaptor.forClass(PaymentSearchSpecification.class);
+        verify(paymentRepository).findAll(specificationCaptor.capture(), any(Sort.class));
+        assertThat(specificationCaptor.getValue().getClubId()).isEqualTo(CLUB_ID);
+        assertThat(specificationCaptor.getValue().getFilter()).isEqualTo(filter);
+        assertThat(response).hasSize(1);
+    }
+
+    @Test
+    void shouldSortSearchResultsByPaidAtDescendingWithDeterministicTieBreakers() {
+        when(paymentRepository.findAll(any(PaymentSearchSpecification.class), any(Sort.class))).thenReturn(List.of());
+
+        paymentService.searchPayments(CLUB_ID, emptySearch());
+
+        ArgumentCaptor<Sort> sortCaptor = ArgumentCaptor.forClass(Sort.class);
+        verify(paymentRepository).findAll(any(PaymentSearchSpecification.class), sortCaptor.capture());
+        assertThat(sortCaptor.getValue().toList())
+                .containsExactly(Sort.Order.desc("paidAt"), Sort.Order.desc("periodCovered"), Sort.Order.desc("id"));
+    }
+
+    @Test
+    void shouldAcceptSearchWhenFromEqualsTo() {
+        LocalDate period = LocalDate.parse("2026-07-01");
+        PaymentSearchRequest filter = new PaymentSearchRequest(null, period, period, null, false);
+        when(paymentRepository.findAll(any(PaymentSearchSpecification.class), any(Sort.class))).thenReturn(List.of());
+
+        List<PaymentResponse> response = paymentService.searchPayments(CLUB_ID, filter);
+
+        assertThat(response).isEmpty();
+    }
+
+    @Test
+    void shouldRejectSearchWhenFromIsAfterToWithoutQueryingPayments() {
+        PaymentSearchRequest filter = new PaymentSearchRequest(null, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-06-01"), null,
+                false);
+
+        assertThatThrownBy(() -> paymentService.searchPayments(CLUB_ID, filter)).isInstanceOf(InvalidDateRangeException.class);
+
+        verifyNoInteractions(paymentRepository);
+    }
+
+    @Test
+    void shouldMarkPaymentAsVoidedByTheActingUserWithTrimmedReason() {
+        Payment payment = payment(MEMBER_ID, LocalDate.parse("2026-07-01"));
+        stubPaymentForUpdate(payment);
+
+        PaymentResponse response = paymentService.voidPayment(CURRENT_USER, PAYMENT_ID, new VoidPaymentRequest("  Importe mal cargado  "));
+
+        verify(paymentRepository).save(payment);
+        assertThat(payment.getVoidedAt()).isNotNull();
+        assertThat(payment.getVoidedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(payment.getVoidReason()).isEqualTo("Importe mal cargado");
+        assertThat(response.voidedAt()).isEqualTo(payment.getVoidedAt());
+    }
+
+    @Test
+    void shouldStoreNullReasonWhenVoidingWithoutRequestBody() {
+        Payment payment = payment(MEMBER_ID, LocalDate.parse("2026-07-01"));
+        stubPaymentForUpdate(payment);
+
+        paymentService.voidPayment(CURRENT_USER, PAYMENT_ID, null);
+
+        assertThat(payment.getVoidedAt()).isNotNull();
+        assertThat(payment.getVoidReason()).isNull();
+    }
+
+    @Test
+    void shouldStoreNullReasonWhenVoidReasonIsBlank() {
+        Payment payment = payment(MEMBER_ID, LocalDate.parse("2026-07-01"));
+        stubPaymentForUpdate(payment);
+
+        paymentService.voidPayment(CURRENT_USER, PAYMENT_ID, new VoidPaymentRequest("   "));
+
+        assertThat(payment.getVoidReason()).isNull();
+    }
+
+    @Test
+    void shouldRejectVoidingAnAlreadyVoidedPaymentWithoutOverwritingTheOriginalVoid() {
+        Payment alreadyVoided = voidedPayment(MEMBER_ID, LocalDate.parse("2026-07-01"));
+        Instant originalVoidedAt = alreadyVoided.getVoidedAt();
+        when(paymentRepository.findByIdAndClubIdForUpdate(PAYMENT_ID, CLUB_ID)).thenReturn(Optional.of(alreadyVoided));
+
+        assertThatThrownBy(() -> paymentService.voidPayment(CURRENT_USER, PAYMENT_ID, null))
+                .isInstanceOf(PaymentAlreadyVoidedException.class);
+
+        verify(paymentRepository, never()).save(any());
+        assertThat(alreadyVoided.getVoidedAt()).isEqualTo(originalVoidedAt);
+        assertThat(alreadyVoided.getVoidedByUserId()).isEqualTo(OTHER_USER_ID);
+    }
+
+    @Test
+    void shouldThrowPaymentNotFoundWhenVoidingPaymentOutsideTheClub() {
+        when(paymentRepository.findByIdAndClubIdForUpdate(PAYMENT_ID, CLUB_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> paymentService.voidPayment(CURRENT_USER, PAYMENT_ID, null)).isInstanceOf(PaymentNotFoundException.class);
+
+        verify(paymentRepository, never()).save(any());
     }
 
     @Test
@@ -300,6 +431,23 @@ class PaymentServiceTest {
         assertThat(report.get(0).daysOverdue()).isZero();
     }
 
+    private void stubPaymentForUpdate(Payment payment) {
+        when(paymentRepository.findByIdAndClubIdForUpdate(PAYMENT_ID, CLUB_ID)).thenReturn(Optional.of(payment));
+        when(paymentRepository.save(payment)).thenReturn(payment);
+    }
+
+    private PaymentSearchRequest emptySearch() {
+        return new PaymentSearchRequest(null, null, null, null, false);
+    }
+
+    private Payment voidedPayment(Long memberId, LocalDate periodCovered) {
+        Payment payment = payment(memberId, periodCovered);
+        payment.setVoidedAt(Instant.parse("2026-07-02T10:00:00Z"));
+        payment.setVoidedByUserId(OTHER_USER_ID);
+
+        return payment;
+    }
+
     private void stubActiveMembers(Member... members) {
         when(memberRepository.findByClubIdAndStatusOrderByCreatedAtDesc(CLUB_ID, MemberStatus.ACTIVE)).thenReturn(List.of(members));
     }
@@ -333,7 +481,7 @@ class PaymentServiceTest {
 
     private Payment payment(Long memberId, LocalDate periodCovered) {
         return Payment.builder()
-                .id(100L)
+                .id(PAYMENT_ID)
                 .memberId(memberId)
                 .amount(AMOUNT)
                 .periodCovered(periodCovered)

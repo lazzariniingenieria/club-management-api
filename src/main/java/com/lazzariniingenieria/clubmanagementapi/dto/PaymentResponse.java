@@ -6,5 +6,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 public record PaymentResponse(Long id, Long memberId, Long paidByMemberId, BigDecimal amount, Instant paidAt,
-        LocalDate periodCovered, PaymentMethod paymentMethod, Long recordedByUserId, Instant createdAt) {
+        LocalDate periodCovered, PaymentMethod paymentMethod, Long recordedByUserId, Instant createdAt, Instant voidedAt,
+        Long voidedByUserId, String voidReason) {
 }

@@ -3,10 +3,14 @@ package com.lazzariniingenieria.clubmanagementapi.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -14,12 +18,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
+import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.VoidPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.PaymentMethod;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicatePeriodCoveredException;
+import com.lazzariniingenieria.clubmanagementapi.exception.InvalidDateRangeException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaidByMemberNotInFamilyGroupException;
+import com.lazzariniingenieria.clubmanagementapi.exception.PaymentAlreadyVoidedException;
+import com.lazzariniingenieria.clubmanagementapi.exception.PaymentNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
 import com.lazzariniingenieria.clubmanagementapi.service.PaymentService;
@@ -49,6 +58,7 @@ class PaymentControllerTest {
     private static final String FIXTURES_PATH = "fixtures/payment/";
     private static final Long CLUB_ID = 1L;
     private static final Long MEMBER_ID = 1L;
+    private static final Long PAYMENT_ID = 10L;
 
     @Autowired
     private MockMvc mockMvc;
@@ -109,7 +119,7 @@ class PaymentControllerTest {
 
     @Test
     void shouldReturnPaymentHistoryWhenRequesterIsSuperAdmin() throws Exception {
-        when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID)).thenReturn(List.of(paymentResponse()));
+        when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID, false)).thenReturn(List.of(paymentResponse()));
 
         mockMvc.perform(get("/api/payments/members/{memberId}", MEMBER_ID).with(asSuperAdmin()))
                 .andExpect(status().isOk());
@@ -229,7 +239,7 @@ class PaymentControllerTest {
 
     @Test
     void shouldReturnPaymentHistoryForMember() throws Exception {
-        when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID)).thenReturn(List.of(paymentResponse()));
+        when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID, false)).thenReturn(List.of(paymentResponse()));
 
         mockMvc.perform(get("/api/payments/members/{memberId}", MEMBER_ID).with(asAdmin()))
                 .andExpect(status().isOk())
@@ -238,7 +248,7 @@ class PaymentControllerTest {
 
     @Test
     void shouldReturnNotFoundWhenListingPaymentsForMissingMember() throws Exception {
-        when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID)).thenThrow(new MemberNotFoundException(MEMBER_ID));
+        when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID, false)).thenThrow(new MemberNotFoundException(MEMBER_ID));
 
         mockMvc.perform(get("/api/payments/members/{memberId}", MEMBER_ID).with(asAdmin()))
                 .andExpect(status().isNotFound());
@@ -262,9 +272,177 @@ class PaymentControllerTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void shouldPassEveryCombinedSearchFilterToTheServiceWhenRequesterIsAdmin() throws Exception {
+        when(paymentService.searchPayments(any(), any(PaymentSearchRequest.class))).thenReturn(List.of(paymentResponse()));
+
+        mockMvc.perform(get("/api/payments")
+                        .with(asAdmin())
+                        .param("memberId", "1")
+                        .param("from", "2026-01-01")
+                        .param("to", "2026-06-01")
+                        .param("paymentMethod", "TRANSFER")
+                        .param("includeVoided", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id", is(10)));
+
+        ArgumentCaptor<PaymentSearchRequest> filterCaptor = ArgumentCaptor.forClass(PaymentSearchRequest.class);
+        verify(paymentService).searchPayments(eq(CLUB_ID), filterCaptor.capture());
+        assertThat(filterCaptor.getValue()).isEqualTo(new PaymentSearchRequest(MEMBER_ID, LocalDate.parse("2026-01-01"),
+                LocalDate.parse("2026-06-01"), PaymentMethod.TRANSFER, true));
+    }
+
+    @Test
+    void shouldSearchWithNoFiltersAndExcludeVoidedByDefault() throws Exception {
+        when(paymentService.searchPayments(any(), any(PaymentSearchRequest.class))).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/payments").with(asSuperAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()", is(0)));
+
+        ArgumentCaptor<PaymentSearchRequest> filterCaptor = ArgumentCaptor.forClass(PaymentSearchRequest.class);
+        verify(paymentService).searchPayments(eq(CLUB_ID), filterCaptor.capture());
+        assertThat(filterCaptor.getValue()).isEqualTo(new PaymentSearchRequest(null, null, null, null, null));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenSearchPaymentMethodIsUnknown() throws Exception {
+        mockMvc.perform(get("/api/payments")
+                        .with(asAdmin())
+                        .param("paymentMethod", "CHEQUE"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]", is("paymentMethod: invalid value")));
+
+        verify(paymentService, never()).searchPayments(any(), any());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenSearchDateIsNotIsoFormatted() throws Exception {
+        mockMvc.perform(get("/api/payments")
+                        .with(asAdmin())
+                        .param("from", "01/07/2026"))
+                .andExpect(status().isBadRequest());
+
+        verify(paymentService, never()).searchPayments(any(), any());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenSearchFromIsAfterTo() throws Exception {
+        when(paymentService.searchPayments(any(), any(PaymentSearchRequest.class)))
+                .thenThrow(new InvalidDateRangeException(LocalDate.parse("2026-07-01"), LocalDate.parse("2026-06-01")));
+
+        mockMvc.perform(get("/api/payments")
+                        .with(asAdmin())
+                        .param("from", "2026-07-01")
+                        .param("to", "2026-06-01"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenMemberSearchesPayments() throws Exception {
+        mockMvc.perform(get("/api/payments").with(asMember()))
+                .andExpect(status().isForbidden());
+
+        verify(paymentService, never()).searchPayments(any(), any());
+    }
+
+    @Test
+    void shouldPassIncludeVoidedToServiceWhenListingMemberHistory() throws Exception {
+        when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID, true)).thenReturn(List.of(voidedPaymentResponse()));
+
+        mockMvc.perform(get("/api/payments/members/{memberId}", MEMBER_ID)
+                        .with(asAdmin())
+                        .param("includeVoided", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].voidedAt", is("2026-07-02T10:00:00Z")))
+                .andExpect(jsonPath("$[0].voidReason", is("Importe mal cargado")));
+    }
+
+    @Test
+    void shouldReturnVoidedPaymentWhenAdminVoidsWithReason() throws Exception {
+        String requestBody = readFixture("void-payment-request-valid.json");
+        when(paymentService.voidPayment(any(AuthenticatedUser.class), eq(PAYMENT_ID), any())).thenReturn(voidedPaymentResponse());
+
+        mockMvc.perform(patch("/api/payments/{paymentId}/void", PAYMENT_ID)
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(10)))
+                .andExpect(jsonPath("$.voidedAt", is("2026-07-02T10:00:00Z")))
+                .andExpect(jsonPath("$.voidedByUserId", is(5)));
+
+        verify(paymentService).voidPayment(any(AuthenticatedUser.class), eq(PAYMENT_ID), eq(new VoidPaymentRequest("Importe mal cargado")));
+    }
+
+    @Test
+    void shouldVoidPaymentWithoutRequestBodyWhenRequesterIsSuperAdmin() throws Exception {
+        when(paymentService.voidPayment(any(AuthenticatedUser.class), eq(PAYMENT_ID), isNull())).thenReturn(voidedPaymentResponse());
+
+        mockMvc.perform(patch("/api/payments/{paymentId}/void", PAYMENT_ID).with(asSuperAdmin()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldReturnConflictWhenVoidingAnAlreadyVoidedPayment() throws Exception {
+        when(paymentService.voidPayment(any(AuthenticatedUser.class), eq(PAYMENT_ID), any()))
+                .thenThrow(new PaymentAlreadyVoidedException(PAYMENT_ID));
+
+        mockMvc.perform(patch("/api/payments/{paymentId}/void", PAYMENT_ID).with(asAdmin()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenVoidingPaymentOutsideTheClub() throws Exception {
+        when(paymentService.voidPayment(any(AuthenticatedUser.class), eq(PAYMENT_ID), any()))
+                .thenThrow(new PaymentNotFoundException(PAYMENT_ID));
+
+        mockMvc.perform(patch("/api/payments/{paymentId}/void", PAYMENT_ID).with(asAdmin()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenVoidReasonExceedsMaxLength() throws Exception {
+        String requestBody = readFixture("void-payment-request-reason-too-long.json");
+
+        mockMvc.perform(patch("/api/payments/{paymentId}/void", PAYMENT_ID)
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+
+        verify(paymentService, never()).voidPayment(any(), any(), any());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenVoidPaymentIdIsNotNumeric() throws Exception {
+        mockMvc.perform(patch("/api/payments/{paymentId}/void", "abc").with(asAdmin()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenMemberVoidsPayment() throws Exception {
+        mockMvc.perform(patch("/api/payments/{paymentId}/void", PAYMENT_ID).with(asMember()))
+                .andExpect(status().isForbidden());
+
+        verify(paymentService, never()).voidPayment(any(), any(), any());
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWhenVoidingWithoutAuthentication() throws Exception {
+        mockMvc.perform(patch("/api/payments/{paymentId}/void", PAYMENT_ID))
+                .andExpect(status().isUnauthorized());
+    }
+
     private PaymentResponse paymentResponse() {
-        return new PaymentResponse(10L, MEMBER_ID, null, new BigDecimal("15000"), Instant.parse("2026-07-01T00:00:00Z"),
-                LocalDate.parse("2026-07-01"), PaymentMethod.CASH, 5L, Instant.parse("2026-07-01T00:00:00Z"));
+        return new PaymentResponse(PAYMENT_ID, MEMBER_ID, null, new BigDecimal("15000"), Instant.parse("2026-07-01T00:00:00Z"),
+                LocalDate.parse("2026-07-01"), PaymentMethod.CASH, 5L, Instant.parse("2026-07-01T00:00:00Z"), null, null, null);
+    }
+
+    private PaymentResponse voidedPaymentResponse() {
+        return new PaymentResponse(PAYMENT_ID, MEMBER_ID, null, new BigDecimal("15000"), Instant.parse("2026-07-01T00:00:00Z"),
+                LocalDate.parse("2026-07-01"), PaymentMethod.CASH, 5L, Instant.parse("2026-07-01T00:00:00Z"),
+                Instant.parse("2026-07-02T10:00:00Z"), 5L, "Importe mal cargado");
     }
 
     private RequestPostProcessor asSuperAdmin() {
