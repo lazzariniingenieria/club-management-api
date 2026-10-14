@@ -201,6 +201,19 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnConflictWithExceptionMessageWhenPeriodIsAlreadyPaid() {
+        PeriodAlreadyPaidException exception = new PeriodAlreadyPaidException(42L, List.of(LocalDate.parse("2026-07-01")));
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handlePeriodAlreadyPaid(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.status()).isEqualTo(409);
+        assertThat(body.message()).isEqualTo("memberId 42 already has a payment for period(s): [2026-07-01]");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
     void shouldReturnConflictWithExceptionMessageWhenPaymentIsAlreadyVoided() {
         PaymentAlreadyVoidedException exception = new PaymentAlreadyVoidedException(42L);
 

@@ -29,6 +29,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundExcepti
 import com.lazzariniingenieria.clubmanagementapi.exception.PaidByMemberNotInFamilyGroupException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaymentAlreadyVoidedException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaymentNotFoundException;
+import com.lazzariniingenieria.clubmanagementapi.exception.PeriodAlreadyPaidException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
 import com.lazzariniingenieria.clubmanagementapi.service.PaymentService;
@@ -170,6 +171,19 @@ class PaymentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnConflictWhenPeriodIsAlreadyPaid() throws Exception {
+        String requestBody = readFixture("record-payment-request-valid.json");
+        when(paymentService.recordPayment(any(AuthenticatedUser.class), any(RecordPaymentRequest.class)))
+                .thenThrow(new PeriodAlreadyPaidException(MEMBER_ID, List.of(LocalDate.parse("2026-07-01"))));
+
+        mockMvc.perform(post("/api/payments")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isConflict());
     }
 
     @Test

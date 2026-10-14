@@ -84,6 +84,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(PeriodAlreadyPaidException.class)
+    public ResponseEntity<ApiErrorDto> handlePeriodAlreadyPaid(PeriodAlreadyPaidException exception) {
+        log.warn("Rejected payment due to period(s) already paid: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(PaymentNotFoundException.class)
     public ResponseEntity<ApiErrorDto> handlePaymentNotFound(PaymentNotFoundException exception) {
         log.warn("Payment lookup failed: {}", exception.getMessage());
