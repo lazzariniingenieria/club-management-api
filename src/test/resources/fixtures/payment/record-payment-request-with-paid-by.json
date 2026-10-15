@@ -1,0 +1,7 @@
+{
+  "memberId": 2,
+  "paidByMemberId": 1,
+  "amount": 15000,
+  "periodsCovered": ["2026-07-01"],
+  "paymentMethod": "TRANSFER"
+}

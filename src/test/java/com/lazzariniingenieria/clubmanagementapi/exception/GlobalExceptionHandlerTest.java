@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.ApiErrorDto;
+import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 class GlobalExceptionHandlerTest {
 
@@ -38,6 +40,19 @@ class GlobalExceptionHandlerTest {
         assertThat(body.status()).isEqualTo(401);
         assertThat(body.error()).isEqualTo("Unauthorized");
         assertThat(body.message()).isEqualTo("Invalid dni or password");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWithExceptionMessageWhenRefreshTokenIsInvalid() {
+        InvalidRefreshTokenException exception = new InvalidRefreshTokenException();
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleInvalidRefreshToken(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(body.status()).isEqualTo(401);
+        assertThat(body.message()).isEqualTo("Invalid or expired refresh token");
         assertThat(body.details()).isEmpty();
     }
 
@@ -68,6 +83,20 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(body.message()).isEqualTo("Validation failed");
         assertThat(body.details()).containsExactly("dni: must not be blank", "clubId: must not be null");
+    }
+
+    @Test
+    void shouldHideConversionInternalsWhenAFieldFailsToBind() {
+        FieldError bindingFailure = new FieldError("paymentSearchRequest", "paymentMethod", "CHEQUE", true, null, null,
+                "Failed to convert value of type 'java.lang.String' to required type 'com.example.PaymentMethod'");
+        BindingResult bindingResult = mock(BindingResult.class);
+        when(bindingResult.getFieldErrors()).thenReturn(List.of(bindingFailure));
+        MethodArgumentNotValidException exception = new MethodArgumentNotValidException(mock(MethodParameter.class), bindingResult);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleValidation(exception);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().details()).containsExactly("paymentMethod: invalid value");
     }
 
     @Test
@@ -130,6 +159,104 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(body.status()).isEqualTo(404);
         assertThat(body.message()).isEqualTo("Family group 42 not found");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnBadRequestWithExceptionMessageWhenPaidByMemberIsNotInFamilyGroup() {
+        PaidByMemberNotInFamilyGroupException exception = new PaidByMemberNotInFamilyGroupException(2L, 1L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handlePaidByMemberNotInFamilyGroup(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.message()).isEqualTo("Member 2 is not in the same family group as member 1");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnBadRequestWithExceptionMessageWhenPeriodsCoveredAreDuplicated() {
+        DuplicatePeriodCoveredException exception = new DuplicatePeriodCoveredException();
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleDuplicatePeriodCovered(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.message()).isEqualTo("periodsCovered must not contain duplicate dates");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnNotFoundWithExceptionMessageWhenPaymentDoesNotExist() {
+        PaymentNotFoundException exception = new PaymentNotFoundException(42L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handlePaymentNotFound(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body.message()).isEqualTo("Payment 42 not found");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnConflictWithExceptionMessageWhenPeriodIsAlreadyPaid() {
+        PeriodAlreadyPaidException exception = new PeriodAlreadyPaidException(42L, List.of(LocalDate.parse("2026-07-01")));
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handlePeriodAlreadyPaid(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.status()).isEqualTo(409);
+        assertThat(body.message()).isEqualTo("memberId 42 already has a payment for period(s): [2026-07-01]");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnConflictWithExceptionMessageWhenPaymentIsAlreadyVoided() {
+        PaymentAlreadyVoidedException exception = new PaymentAlreadyVoidedException(42L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handlePaymentAlreadyVoided(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.status()).isEqualTo(409);
+        assertThat(body.message()).isEqualTo("Payment 42 is already voided");
+    }
+
+    @Test
+    void shouldReturnNotFoundWithExceptionMessageWhenClubDoesNotExist() {
+        ClubNotFoundException exception = new ClubNotFoundException(1L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleClubNotFound(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body.message()).isEqualTo("Club 1 not found");
+    }
+
+    @Test
+    void shouldReturnBadRequestWithExceptionMessageWhenDateRangeIsInverted() {
+        InvalidDateRangeException exception = new InvalidDateRangeException(LocalDate.parse("2026-07-01"), LocalDate.parse("2026-06-01"));
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleInvalidDateRange(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(body.message()).isEqualTo("from 2026-07-01 must not be after to 2026-06-01");
+    }
+
+    @Test
+    void shouldReturnBadRequestNamingTheParameterWhenItCannotBeParsed() {
+        MethodArgumentTypeMismatchException exception = new MethodArgumentTypeMismatchException("abc", Long.class, "paymentId",
+                mock(MethodParameter.class), new NumberFormatException("abc"));
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleArgumentTypeMismatch(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(body.message()).isEqualTo("Invalid value for parameter paymentId");
         assertThat(body.details()).isEmpty();
     }
 

@@ -11,6 +11,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundExcepti
 import com.lazzariniingenieria.clubmanagementapi.mapper.MemberMapper;
 import com.lazzariniingenieria.clubmanagementapi.repository.FamilyGroupRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
+import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -27,13 +28,19 @@ public class MemberService {
     private final MemberMapper memberMapper;
     private final FamilyGroupRepository familyGroupRepository;
 
-    public MemberResponse createMember(Long clubId, CreateMemberRequest request) {
+    public MemberResponse createMember(AuthenticatedUser currentUser, CreateMemberRequest request) {
+        Long clubId = currentUser.clubId();
         boolean dniInUse = memberRepository.existsByClubIdAndDni(clubId, request.dni());
 
         if (dniInUse) {
             throw new DuplicateDniException(request.dni());
         }
 
+        if (request.familyGroupId() != null) {
+            validateFamilyGroupExists(clubId, request.familyGroupId());
+        }
+
+        Instant now = Instant.now();
         Member member = Member.builder()
                 .clubId(clubId)
                 .firstName(request.firstName())
@@ -41,9 +48,13 @@ public class MemberService {
                 .dni(request.dni())
                 .phone(request.phone())
                 .email(request.email())
+                .familyGroupId(request.familyGroupId())
                 .joinedAt(LocalDate.now())
                 .status(MemberStatus.ACTIVE)
-                .createdAt(Instant.now())
+                .createdAt(now)
+                .updatedAt(now)
+                .createdByUserId(currentUser.userAccountId())
+                .updatedByUserId(currentUser.userAccountId())
                 .build();
 
         Member savedMember = memberRepository.save(member);
@@ -64,7 +75,8 @@ public class MemberService {
         return memberMapper.toResponse(member);
     }
 
-    public MemberResponse updateMember(Long clubId, Long memberId, UpdateMemberRequest request) {
+    public MemberResponse updateMember(AuthenticatedUser currentUser, Long memberId, UpdateMemberRequest request) {
+        Long clubId = currentUser.clubId();
         Member member = findMemberOrThrow(clubId, memberId);
         boolean dniTakenByAnotherMember = memberRepository.existsByClubIdAndDniAndIdNot(clubId, request.dni(), memberId);
 
@@ -77,6 +89,7 @@ public class MemberService {
         member.setDni(request.dni());
         member.setPhone(request.phone());
         member.setEmail(request.email());
+        markUpdated(member, currentUser.userAccountId());
 
         Member savedMember = memberRepository.save(member);
         log.info("Updated member memberId={} for clubId={}", memberId, clubId);
@@ -84,9 +97,11 @@ public class MemberService {
         return memberMapper.toResponse(savedMember);
     }
 
-    public MemberResponse deactivateMember(Long clubId, Long memberId) {
+    public MemberResponse deactivateMember(AuthenticatedUser currentUser, Long memberId) {
+        Long clubId = currentUser.clubId();
         Member member = findMemberOrThrow(clubId, memberId);
         member.setStatus(MemberStatus.INACTIVE);
+        markUpdated(member, currentUser.userAccountId());
 
         Member savedMember = memberRepository.save(member);
         log.info("Deactivated member memberId={} for clubId={}", memberId, clubId);
@@ -94,9 +109,11 @@ public class MemberService {
         return memberMapper.toResponse(savedMember);
     }
 
-    public MemberResponse reactivateMember(Long clubId, Long memberId) {
+    public MemberResponse reactivateMember(AuthenticatedUser currentUser, Long memberId) {
+        Long clubId = currentUser.clubId();
         Member member = findMemberOrThrow(clubId, memberId);
         member.setStatus(MemberStatus.ACTIVE);
+        markUpdated(member, currentUser.userAccountId());
 
         Member savedMember = memberRepository.save(member);
         log.info("Reactivated member memberId={} for clubId={}", memberId, clubId);
@@ -104,15 +121,13 @@ public class MemberService {
         return memberMapper.toResponse(savedMember);
     }
 
-    public MemberResponse assignFamilyGroup(Long clubId, Long memberId, Long familyGroupId) {
+    public MemberResponse assignFamilyGroup(AuthenticatedUser currentUser, Long memberId, Long familyGroupId) {
+        Long clubId = currentUser.clubId();
         Member member = findMemberOrThrow(clubId, memberId);
-        boolean familyGroupExists = familyGroupRepository.existsByIdAndClubId(familyGroupId, clubId);
-
-        if (!familyGroupExists) {
-            throw new FamilyGroupNotFoundException(familyGroupId);
-        }
+        validateFamilyGroupExists(clubId, familyGroupId);
 
         member.setFamilyGroupId(familyGroupId);
+        markUpdated(member, currentUser.userAccountId());
 
         Member savedMember = memberRepository.save(member);
         log.info("Assigned familyGroupId={} to member memberId={} for clubId={}", familyGroupId, memberId, clubId);
@@ -120,14 +135,29 @@ public class MemberService {
         return memberMapper.toResponse(savedMember);
     }
 
-    public MemberResponse unassignFamilyGroup(Long clubId, Long memberId) {
+    public MemberResponse unassignFamilyGroup(AuthenticatedUser currentUser, Long memberId) {
+        Long clubId = currentUser.clubId();
         Member member = findMemberOrThrow(clubId, memberId);
         member.setFamilyGroupId(null);
+        markUpdated(member, currentUser.userAccountId());
 
         Member savedMember = memberRepository.save(member);
         log.info("Unassigned family group from member memberId={} for clubId={}", memberId, clubId);
 
         return memberMapper.toResponse(savedMember);
+    }
+
+    private void validateFamilyGroupExists(Long clubId, Long familyGroupId) {
+        boolean familyGroupExists = familyGroupRepository.existsByIdAndClubId(familyGroupId, clubId);
+
+        if (!familyGroupExists) {
+            throw new FamilyGroupNotFoundException(familyGroupId);
+        }
+    }
+
+    private void markUpdated(Member member, Long actingUserId) {
+        member.setUpdatedAt(Instant.now());
+        member.setUpdatedByUserId(actingUserId);
     }
 
     private Member findMemberOrThrow(Long clubId, Long memberId) {

@@ -31,7 +31,7 @@ public class MemberController {
     @PostMapping
     public ResponseEntity<MemberResponse> create(@AuthenticationPrincipal AuthenticatedUser currentUser,
                                                   @Valid @RequestBody CreateMemberRequest request) {
-        MemberResponse response = memberService.createMember(currentUser.clubId(), request);
+        MemberResponse response = memberService.createMember(currentUser, request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -54,21 +54,21 @@ public class MemberController {
     public ResponseEntity<MemberResponse> update(@AuthenticationPrincipal AuthenticatedUser currentUser,
                                                   @PathVariable Long memberId,
                                                   @Valid @RequestBody UpdateMemberRequest request) {
-        MemberResponse response = memberService.updateMember(currentUser.clubId(), memberId, request);
+        MemberResponse response = memberService.updateMember(currentUser, memberId, request);
 
         return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/{memberId}/deactivate")
     public ResponseEntity<MemberResponse> deactivate(@AuthenticationPrincipal AuthenticatedUser currentUser, @PathVariable Long memberId) {
-        MemberResponse response = memberService.deactivateMember(currentUser.clubId(), memberId);
+        MemberResponse response = memberService.deactivateMember(currentUser, memberId);
 
         return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/{memberId}/reactivate")
     public ResponseEntity<MemberResponse> reactivate(@AuthenticationPrincipal AuthenticatedUser currentUser, @PathVariable Long memberId) {
-        MemberResponse response = memberService.reactivateMember(currentUser.clubId(), memberId);
+        MemberResponse response = memberService.reactivateMember(currentUser, memberId);
 
         return ResponseEntity.ok(response);
     }
@@ -78,7 +78,7 @@ public class MemberController {
                                                               @PathVariable Long memberId,
                                                               @Valid @RequestBody AssignFamilyGroupRequest request) {
         Long familyGroupId = request.familyGroupId();
-        MemberResponse response = memberService.assignFamilyGroup(currentUser.clubId(), memberId, familyGroupId);
+        MemberResponse response = memberService.assignFamilyGroup(currentUser, memberId, familyGroupId);
 
         return ResponseEntity.ok(response);
     }
@@ -86,7 +86,7 @@ public class MemberController {
     @DeleteMapping("/{memberId}/family-group")
     public ResponseEntity<MemberResponse> unassignFamilyGroup(@AuthenticationPrincipal AuthenticatedUser currentUser,
                                                                 @PathVariable Long memberId) {
-        MemberResponse response = memberService.unassignFamilyGroup(currentUser.clubId(), memberId);
+        MemberResponse response = memberService.unassignFamilyGroup(currentUser, memberId);
 
         return ResponseEntity.ok(response);
     }

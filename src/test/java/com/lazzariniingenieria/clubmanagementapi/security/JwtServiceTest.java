@@ -78,6 +78,11 @@ class JwtServiceTest {
     }
 
     @Test
+    void shouldExposeExpirationInSeconds() {
+        assertThat(jwtService.getExpirationSeconds()).isEqualTo(3_600L);
+    }
+
+    @Test
     void shouldRejectTamperedToken() {
         UserAccount user = UserAccount.builder()
                 .id(1L)

@@ -7,9 +7,13 @@ import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponse;
+import com.lazzariniingenieria.clubmanagementapi.dto.RefreshRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RefreshResponse;
+import com.lazzariniingenieria.clubmanagementapi.entity.RefreshToken;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
+import com.lazzariniingenieria.clubmanagementapi.exception.InvalidRefreshTokenException;
 import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
 import java.util.Optional;
@@ -37,11 +41,14 @@ class AuthServiceTest {
     @Mock
     private JwtService jwtService;
 
+    @Mock
+    private RefreshTokenService refreshTokenService;
+
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userAccountRepository, passwordEncoder, jwtService);
+        authService = new AuthService(userAccountRepository, passwordEncoder, jwtService, refreshTokenService);
     }
 
     @Test
@@ -52,10 +59,14 @@ class AuthServiceTest {
         when(userAccountRepository.findByClubIdAndDni(CLUB_ID, DNI)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(RAW_PASSWORD, HASHED_PASSWORD)).thenReturn(true);
         when(jwtService.generateToken(user)).thenReturn("signed-token");
+        when(jwtService.getExpirationSeconds()).thenReturn(3_600L);
+        when(refreshTokenService.issueToken(1L)).thenReturn("raw-refresh-token");
 
         LoginResponse response = authService.login(request);
 
         assertThat(response.accessToken()).isEqualTo("signed-token");
+        assertThat(response.refreshToken()).isEqualTo("raw-refresh-token");
+        assertThat(response.expiresIn()).isEqualTo(3_600L);
         assertThat(response.userAccountId()).isEqualTo(1L);
         assertThat(response.role()).isEqualTo(UserRole.MEMBER);
         assertThat(response.memberId()).isEqualTo(7L);
@@ -102,6 +113,53 @@ class AuthServiceTest {
         when(passwordEncoder.matches(RAW_PASSWORD, HASHED_PASSWORD)).thenReturn(true);
 
         assertThatThrownBy(() -> authService.login(request)).isInstanceOf(InvalidCredentialsException.class);
+
+        verifyNoInteractions(jwtService);
+    }
+
+    @Test
+    void shouldReturnNewAccessAndRefreshTokenWhenRefreshTokenIsValid() {
+        UserAccount user = memberUser();
+        RefreshRequest request = new RefreshRequest("raw-refresh-token");
+        RefreshToken consumedToken = RefreshToken.builder().userAccountId(1L).build();
+
+        when(refreshTokenService.consumeToken("raw-refresh-token")).thenReturn(consumedToken);
+        when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(jwtService.generateToken(user)).thenReturn("new-access-token");
+        when(jwtService.getExpirationSeconds()).thenReturn(3_600L);
+        when(refreshTokenService.issueToken(1L)).thenReturn("new-refresh-token");
+
+        RefreshResponse response = authService.refresh(request);
+
+        assertThat(response.accessToken()).isEqualTo("new-access-token");
+        assertThat(response.refreshToken()).isEqualTo("new-refresh-token");
+        assertThat(response.expiresIn()).isEqualTo(3_600L);
+    }
+
+    @Test
+    void shouldThrowInvalidRefreshTokenWhenUnderlyingUserAccountNoLongerExists() {
+        RefreshRequest request = new RefreshRequest("raw-refresh-token");
+        RefreshToken consumedToken = RefreshToken.builder().userAccountId(1L).build();
+
+        when(refreshTokenService.consumeToken("raw-refresh-token")).thenReturn(consumedToken);
+        when(userAccountRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.refresh(request)).isInstanceOf(InvalidRefreshTokenException.class);
+
+        verifyNoInteractions(jwtService);
+    }
+
+    @Test
+    void shouldThrowInvalidRefreshTokenWhenUserAccountIsInactive() {
+        UserAccount user = memberUser();
+        user.setActive(false);
+        RefreshRequest request = new RefreshRequest("raw-refresh-token");
+        RefreshToken consumedToken = RefreshToken.builder().userAccountId(1L).build();
+
+        when(refreshTokenService.consumeToken("raw-refresh-token")).thenReturn(consumedToken);
+        when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.refresh(request)).isInstanceOf(InvalidRefreshTokenException.class);
 
         verifyNoInteractions(jwtService);
     }
