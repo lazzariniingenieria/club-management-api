@@ -25,6 +25,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundExcepti
 import com.lazzariniingenieria.clubmanagementapi.exception.PaidByMemberNotInFamilyGroupException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaymentAlreadyVoidedException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaymentNotFoundException;
+import com.lazzariniingenieria.clubmanagementapi.exception.PeriodAlreadyPaidException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.PaymentMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.PaymentMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberLastPaidPeriod;
@@ -212,6 +213,49 @@ class PaymentServiceTest {
                 .isInstanceOf(DuplicatePeriodCoveredException.class);
 
         verify(paymentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void shouldThrowPeriodAlreadyPaidWhenMemberAlreadyHasAnActivePaymentForARequestedPeriod() {
+        LocalDate period = LocalDate.parse("2026-07-01");
+        RecordPaymentRequest request = new RecordPaymentRequest(MEMBER_ID, null, AMOUNT, List.of(period), PaymentMethod.CASH);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
+        when(paymentRepository.findByMemberIdAndVoidedAtIsNullAndPeriodCoveredIn(MEMBER_ID, List.of(period)))
+                .thenReturn(List.of(payment(MEMBER_ID, period)));
+
+        assertThatThrownBy(() -> paymentService.recordPayment(CURRENT_USER, request))
+                .isInstanceOf(PeriodAlreadyPaidException.class)
+                .hasMessageContaining("2026-07-01");
+
+        verify(paymentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void shouldRejectTheWholeRequestWhenOnlyOneOfMultiplePeriodsIsAlreadyPaid() {
+        LocalDate alreadyPaidPeriod = LocalDate.parse("2026-06-01");
+        LocalDate newPeriod = LocalDate.parse("2026-07-01");
+        List<LocalDate> periods = List.of(alreadyPaidPeriod, newPeriod);
+        RecordPaymentRequest request = new RecordPaymentRequest(MEMBER_ID, null, AMOUNT, periods, PaymentMethod.CASH);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
+        when(paymentRepository.findByMemberIdAndVoidedAtIsNullAndPeriodCoveredIn(MEMBER_ID, periods))
+                .thenReturn(List.of(payment(MEMBER_ID, alreadyPaidPeriod)));
+
+        assertThatThrownBy(() -> paymentService.recordPayment(CURRENT_USER, request)).isInstanceOf(PeriodAlreadyPaidException.class);
+
+        verify(paymentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void shouldAllowRecordingPaymentWhenTheOnlyExistingPaymentForThatPeriodWasVoided() {
+        LocalDate period = LocalDate.parse("2026-07-01");
+        RecordPaymentRequest request = new RecordPaymentRequest(MEMBER_ID, null, AMOUNT, List.of(period), PaymentMethod.CASH);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
+        when(paymentRepository.findByMemberIdAndVoidedAtIsNullAndPeriodCoveredIn(MEMBER_ID, List.of(period))).thenReturn(List.of());
+        when(paymentRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<PaymentResponse> response = paymentService.recordPayment(CURRENT_USER, request);
+
+        assertThat(response).hasSize(1);
     }
 
     @Test

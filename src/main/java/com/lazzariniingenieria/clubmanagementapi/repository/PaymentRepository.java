@@ -2,6 +2,7 @@ package com.lazzariniingenieria.clubmanagementapi.repository;
 
 import com.lazzariniingenieria.clubmanagementapi.entity.Payment;
 import jakarta.persistence.LockModeType;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +17,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpec
     List<Payment> findByMemberIdOrderByPeriodCoveredDesc(Long memberId);
 
     List<Payment> findByMemberIdAndVoidedAtIsNullOrderByPeriodCoveredDesc(Long memberId);
+
+    List<Payment> findByMemberIdAndVoidedAtIsNullAndPeriodCoveredIn(Long memberId, Collection<LocalDate> periodsCovered);
 
     @Query("select p.memberId as memberId, max(p.periodCovered) as lastPeriodCovered "
             + "from Payment p where p.memberId in :memberIds and p.voidedAt is null group by p.memberId")

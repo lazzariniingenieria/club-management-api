@@ -14,6 +14,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundExcepti
 import com.lazzariniingenieria.clubmanagementapi.exception.PaidByMemberNotInFamilyGroupException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaymentAlreadyVoidedException;
 import com.lazzariniingenieria.clubmanagementapi.exception.PaymentNotFoundException;
+import com.lazzariniingenieria.clubmanagementapi.exception.PeriodAlreadyPaidException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.PaymentMapper;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberLastPaidPeriod;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
@@ -54,6 +55,7 @@ public class PaymentService {
         Member member = findMemberOrThrow(clubId, request.memberId());
         Long paidByMemberId = resolvePaidByMemberId(clubId, member, request.paidByMemberId());
         validateDistinctPeriods(request.periodsCovered());
+        rejectIfAnyPeriodAlreadyPaid(request.memberId(), request.periodsCovered());
 
         List<Payment> payments = buildPayments(request, paidByMemberId, currentUser.userAccountId());
         List<Payment> savedPayments = paymentRepository.saveAll(payments);
@@ -185,6 +187,22 @@ public class PaymentService {
         if (distinctCount != periodsCovered.size()) {
             throw new DuplicatePeriodCoveredException();
         }
+    }
+
+    private void rejectIfAnyPeriodAlreadyPaid(Long memberId, List<LocalDate> periodsCovered) {
+        List<Payment> existingPayments = paymentRepository.findByMemberIdAndVoidedAtIsNullAndPeriodCoveredIn(memberId, periodsCovered);
+
+        if (existingPayments.isEmpty()) {
+            return;
+        }
+
+        List<LocalDate> alreadyPaidPeriods = new ArrayList<>();
+
+        for (Payment existingPayment : existingPayments) {
+            alreadyPaidPeriods.add(existingPayment.getPeriodCovered());
+        }
+
+        throw new PeriodAlreadyPaidException(memberId, alreadyPaidPeriods);
     }
 
     private void validateDateRange(LocalDate from, LocalDate to) {
