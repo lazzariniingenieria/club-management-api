@@ -24,6 +24,7 @@ src/main/java/.../
   entity/
   dto/
   mapper/
+  report/
   config/
   exception/
 ```

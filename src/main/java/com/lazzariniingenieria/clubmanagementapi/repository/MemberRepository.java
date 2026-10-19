@@ -2,6 +2,7 @@ package com.lazzariniingenieria.clubmanagementapi.repository;
 
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,4 +20,6 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     List<Member> findByClubIdOrderByCreatedAtDesc(Long clubId);
 
     List<Member> findByClubIdAndStatusOrderByCreatedAtDesc(Long clubId, MemberStatus status);
+
+    List<Member> findByClubIdAndIdIn(Long clubId, Collection<Long> ids);
 }
