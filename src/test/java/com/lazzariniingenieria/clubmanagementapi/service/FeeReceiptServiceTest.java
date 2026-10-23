@@ -83,7 +83,8 @@ class FeeReceiptServiceTest {
     @Test
     void shouldRejectRangeWhenPaidFromIsAfterPaidToWithoutQueryingPayments() {
         assertThatThrownBy(() -> feeReceiptService.generateReceiptsPdf(CLUB_ID, PAID_TO, PAID_FROM))
-                .isInstanceOf(InvalidDateRangeException.class);
+                .isInstanceOf(InvalidDateRangeException.class)
+                .hasMessage("paidFrom 2026-10-15 must not be after paidTo 2026-10-01");
 
         verifyNoInteractions(paymentRepository);
     }

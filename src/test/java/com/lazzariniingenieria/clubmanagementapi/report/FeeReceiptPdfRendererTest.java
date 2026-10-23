@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -98,6 +99,16 @@ class FeeReceiptPdfRendererTest {
         String text = extractText(renderer.render(CLUB_NAME, List.of(receipt)));
 
         assertThat(text).contains("Gomez Ana ?");
+    }
+
+    @Test
+    void shouldPrintAccentsOfDecomposedNamesInsteadOfReplacingThem() throws IOException {
+        String decomposedName = Normalizer.normalize("Gómez Ana", Normalizer.Form.NFD);
+        FeeReceipt receipt = receipt(JULY, line(decomposedName, FEE));
+
+        String text = extractText(renderer.render(CLUB_NAME, List.of(receipt)));
+
+        assertThat(text).contains("Gómez Ana").doesNotContain("?");
     }
 
     @Test

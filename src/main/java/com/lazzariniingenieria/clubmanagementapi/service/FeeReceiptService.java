@@ -164,7 +164,7 @@ public class FeeReceiptService {
 
     private void validateDateRange(LocalDate paidFrom, LocalDate paidTo) {
         if (paidFrom.isAfter(paidTo)) {
-            throw new InvalidDateRangeException(paidFrom, paidTo);
+            throw new InvalidDateRangeException("paidFrom " + paidFrom + " must not be after paidTo " + paidTo);
         }
     }
 

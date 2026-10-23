@@ -2,6 +2,7 @@ package com.lazzariniingenieria.clubmanagementapi.report;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.text.Normalizer;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -80,12 +81,14 @@ class FeeReceiptCanvas implements Closeable {
         content.endText();
     }
 
-    // Standard 14 fonts only cover WinAnsi: any other character (an emoji pasted into a name, a tab) would make showText
-    // throw and fail the whole report, so it is printed as '?' instead.
+    // Standard 14 fonts only cover WinAnsi. The text is first composed (NFC) so a decomposed accent (e + U+0301) becomes
+    // the single WinAnsi character é. Anything still outside WinAnsi (an emoji pasted into a name, a tab) would make
+    // showText throw and fail the whole report, so it is printed as '?' instead.
     private String toEncodableText(String text, PDFont font) throws IOException {
         StringBuilder encodableText = new StringBuilder();
+        String composedText = Normalizer.normalize(text, Normalizer.Form.NFC);
 
-        for (int codePoint : text.codePoints().toArray()) {
+        for (int codePoint : composedText.codePoints().toArray()) {
             int printableCodePoint = canEncode(font, codePoint) ? codePoint : REPLACEMENT_CHARACTER;
             encodableText.appendCodePoint(printableCodePoint);
         }

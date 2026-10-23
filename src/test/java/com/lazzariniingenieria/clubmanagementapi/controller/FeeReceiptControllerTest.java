@@ -1,6 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
@@ -43,6 +44,7 @@ class FeeReceiptControllerTest {
     private static final LocalDate PAID_FROM = LocalDate.parse("2026-10-01");
     private static final LocalDate PAID_TO = LocalDate.parse("2026-10-15");
     private static final byte[] PDF = {37, 80, 68, 70};
+    private static final String INVERTED_RANGE_MESSAGE = "paidFrom 2026-10-15 must not be after paidTo 2026-10-01";
 
     @Autowired
     private MockMvc mockMvc;
@@ -126,13 +128,40 @@ class FeeReceiptControllerTest {
     @Test
     void shouldReturnBadRequestWhenPaidFromIsAfterPaidTo() throws Exception {
         when(feeReceiptService.generateReceiptsPdf(CLUB_ID, PAID_TO, PAID_FROM))
-                .thenThrow(new InvalidDateRangeException(PAID_TO, PAID_FROM));
+                .thenThrow(new InvalidDateRangeException(INVERTED_RANGE_MESSAGE));
 
         mockMvc.perform(get(RECEIPTS_PATH)
                         .with(asAdmin())
                         .param("paidFrom", "2026-10-15")
                         .param("paidTo", "2026-10-01"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is(INVERTED_RANGE_MESSAGE)));
+    }
+
+    @Test
+    void shouldReturnJsonErrorWhenAParameterIsMissingAndClientAcceptsOnlyPdf() throws Exception {
+        mockMvc.perform(get(RECEIPTS_PATH)
+                        .with(asAdmin())
+                        .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_PDF_VALUE)
+                        .param("paidTo", "2026-10-15"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.details", hasItem("paidFrom: paidFrom is required")));
+    }
+
+    @Test
+    void shouldReturnJsonErrorWhenRangeIsInvertedAndClientAcceptsOnlyPdf() throws Exception {
+        when(feeReceiptService.generateReceiptsPdf(CLUB_ID, PAID_TO, PAID_FROM))
+                .thenThrow(new InvalidDateRangeException(INVERTED_RANGE_MESSAGE));
+
+        mockMvc.perform(get(RECEIPTS_PATH)
+                        .with(asAdmin())
+                        .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_PDF_VALUE)
+                        .param("paidFrom", "2026-10-15")
+                        .param("paidTo", "2026-10-01"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.message", is(INVERTED_RANGE_MESSAGE)));
     }
 
     @Test
