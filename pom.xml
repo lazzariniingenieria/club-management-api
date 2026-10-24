@@ -30,6 +30,7 @@
 		<java.version>25</java.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<jjwt.version>0.13.0</jjwt.version>
+		<pdfbox.version>3.0.8</pdfbox.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -94,6 +95,11 @@
 			<groupId>org.mapstruct</groupId>
 			<artifactId>mapstruct</artifactId>
 			<version>${mapstruct.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>${pdfbox.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

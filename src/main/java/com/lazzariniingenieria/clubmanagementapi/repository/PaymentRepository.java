@@ -2,6 +2,7 @@ package com.lazzariniingenieria.clubmanagementapi.repository;
 
 import com.lazzariniingenieria.clubmanagementapi.entity.Payment;
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -23,6 +24,11 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpec
     @Query("select p.memberId as memberId, max(p.periodCovered) as lastPeriodCovered "
             + "from Payment p where p.memberId in :memberIds and p.voidedAt is null group by p.memberId")
     List<MemberLastPaidPeriod> findLastPaidPeriodByMemberIds(@Param("memberIds") Collection<Long> memberIds);
+
+    @Query("select p from Payment p where p.memberId in (select m.id from Member m where m.clubId = :clubId) "
+            + "and p.voidedAt is null and p.paidAt >= :paidFrom and p.paidAt < :paidUntil")
+    List<Payment> findActiveByClubIdAndPaidAtInRange(@Param("clubId") Long clubId, @Param("paidFrom") Instant paidFrom,
+                                                     @Param("paidUntil") Instant paidUntil);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payment p where p.id = :paymentId "
