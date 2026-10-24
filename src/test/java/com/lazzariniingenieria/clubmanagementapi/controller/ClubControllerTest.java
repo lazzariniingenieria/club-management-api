@@ -125,16 +125,17 @@ class ClubControllerTest {
     }
 
     @Test
-    void shouldReturnForbiddenWhenAdminUpdatesMonthlyFee() throws Exception {
+    void shouldUpdateMonthlyFeeWhenRequesterIsAdmin() throws Exception {
         String requestBody = readFixture("update-club-monthly-fee-request-valid.json");
+        when(clubService.updateMonthlyFee(any(AuthenticatedUser.class), any(UpdateClubMonthlyFeeRequest.class)))
+                .thenReturn(clubResponse(new BigDecimal("15000.00")));
 
         mockMvc.perform(patch("/api/clubs/me")
                         .with(asAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isForbidden());
-
-        verify(clubService, never()).updateMonthlyFee(any(), any());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.monthlyFeeAmount", is(15000.00)));
     }
 
     @Test
