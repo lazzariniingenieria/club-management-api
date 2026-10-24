@@ -19,6 +19,7 @@ import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentBatchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.VoidPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.PaymentMethod;
@@ -120,6 +121,75 @@ class PaymentControllerTest {
         verify(paymentService).recordPayment(any(AuthenticatedUser.class), requestCaptor.capture());
         assertThat(requestCaptor.getValue().periodsCovered())
                 .containsExactly(LocalDate.parse("2026-06-01"), LocalDate.parse("2026-07-01"));
+    }
+
+    @Test
+    void shouldReturnEveryCreatedPaymentWhenRecordingABatch() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-valid.json");
+        when(paymentService.recordPaymentBatch(any(AuthenticatedUser.class), any(RecordPaymentBatchRequest.class)))
+                .thenReturn(List.of(paymentResponse(), paymentResponse()));
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()", is(2)));
+
+        ArgumentCaptor<RecordPaymentBatchRequest> requestCaptor = ArgumentCaptor.forClass(RecordPaymentBatchRequest.class);
+        verify(paymentService).recordPaymentBatch(any(AuthenticatedUser.class), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().payments()).extracting(RecordPaymentRequest::memberId).containsExactly(1L, 2L);
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenBatchHasNoPayments() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-empty.json");
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+
+        verify(paymentService, never()).recordPaymentBatch(any(), any());
+    }
+
+    @Test
+    void shouldReturnBadRequestNamingTheEntryWhenABatchEntryIsInvalid() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-invalid-entry.json");
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]", is("payments[1].amount: amount must be greater than zero")));
+
+        verify(paymentService, never()).recordPaymentBatch(any(), any());
+    }
+
+    @Test
+    void shouldReturnConflictWhenABatchEntryHasAPeriodAlreadyPaid() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-valid.json");
+        when(paymentService.recordPaymentBatch(any(AuthenticatedUser.class), any(RecordPaymentBatchRequest.class)))
+                .thenThrow(new PeriodAlreadyPaidException(2L, List.of(LocalDate.parse("2026-07-01"))));
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenMemberRecordsABatch() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-valid.json");
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asMember())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isForbidden());
     }
 
     @Test

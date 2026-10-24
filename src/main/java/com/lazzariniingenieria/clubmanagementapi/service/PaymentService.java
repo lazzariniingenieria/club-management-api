@@ -3,6 +3,7 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentBatchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.VoidPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
@@ -51,15 +52,21 @@ public class PaymentService {
 
     @Transactional
     public List<PaymentResponse> recordPayment(AuthenticatedUser currentUser, RecordPaymentRequest request) {
-        Long clubId = currentUser.clubId();
-        Member member = findMemberOrThrow(clubId, request.memberId());
-        Long paidByMemberId = resolvePaidByMemberId(clubId, member, request.paidByMemberId());
-        validateDistinctPeriods(request.periodsCovered());
-        rejectIfAnyPeriodAlreadyPaid(request.memberId(), request.periodsCovered());
+        List<Payment> savedPayments = recordPaymentsForMember(currentUser, request);
 
-        List<Payment> payments = buildPayments(request, paidByMemberId, currentUser.userAccountId());
-        List<Payment> savedPayments = paymentRepository.saveAll(payments);
-        log.info("Recorded {} payment(s) for memberId={} in clubId={}", savedPayments.size(), request.memberId(), clubId);
+        return paymentMapper.toResponseList(savedPayments);
+    }
+
+    @Transactional
+    public List<PaymentResponse> recordPaymentBatch(AuthenticatedUser currentUser, RecordPaymentBatchRequest request) {
+        List<Payment> savedPayments = new ArrayList<>();
+
+        for (RecordPaymentRequest memberPayment : request.payments()) {
+            savedPayments.addAll(recordPaymentsForMember(currentUser, memberPayment));
+        }
+
+        log.info("Recorded a batch of {} payment(s) across {} entries in clubId={}", savedPayments.size(), request.payments().size(),
+                currentUser.clubId());
 
         return paymentMapper.toResponseList(savedPayments);
     }
@@ -112,6 +119,20 @@ public class PaymentService {
         report.sort(Comparator.comparingLong(MemberDelinquencyResponse::daysOverdue).reversed());
 
         return report;
+    }
+
+    private List<Payment> recordPaymentsForMember(AuthenticatedUser currentUser, RecordPaymentRequest request) {
+        Long clubId = currentUser.clubId();
+        Member member = findMemberOrThrow(clubId, request.memberId());
+        Long paidByMemberId = resolvePaidByMemberId(clubId, member, request.paidByMemberId());
+        validateDistinctPeriods(request.periodsCovered());
+        rejectIfAnyPeriodAlreadyPaid(request.memberId(), request.periodsCovered());
+
+        List<Payment> payments = buildPayments(request, paidByMemberId, currentUser.userAccountId());
+        List<Payment> savedPayments = paymentRepository.saveAll(payments);
+        log.info("Recorded {} payment(s) for memberId={} in clubId={}", savedPayments.size(), request.memberId(), clubId);
+
+        return savedPayments;
     }
 
     private List<Payment> buildPayments(RecordPaymentRequest request, Long paidByMemberId, Long recordedByUserId) {
