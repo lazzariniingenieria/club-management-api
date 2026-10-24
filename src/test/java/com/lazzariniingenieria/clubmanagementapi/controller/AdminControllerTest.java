@@ -3,6 +3,8 @@ package com.lazzariniingenieria.clubmanagementapi.controller;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -255,16 +257,16 @@ class AdminControllerTest {
     }
 
     @Test
-    void shouldResetAdminPasswordWhenRequesterIsAdmin() throws Exception {
+    void shouldReturnForbiddenWhenAdminTriesToResetAnotherAdminsPassword() throws Exception {
         String requestBody = readFixture("reset-admin-password-request-valid.json");
-        when(adminService.resetPassword(any(AuthenticatedUser.class), eq(ADMIN_ID), any(ResetAdminPasswordRequest.class)))
-                .thenReturn(adminResponse());
 
         mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
                         .with(asAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
+
+        verify(adminService, never()).resetPassword(any(), any(), any());
     }
 
     @Test
