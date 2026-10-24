@@ -3,8 +3,12 @@ package com.lazzariniingenieria.clubmanagementapi.controller;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -17,8 +21,11 @@ import com.lazzariniingenieria.clubmanagementapi.dto.FamilyGroupResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateFamilyGroupRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberAlreadyInFamilyGroupException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.FamilyGroupService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -53,6 +60,9 @@ class FamilyGroupControllerTest {
     @MockitoBean
     private JwtService jwtService;
 
+    @MockitoBean
+    private AccountSessionService accountSessionService;
+
     @Test
     void shouldReturnCreatedFamilyGroupWhenRequesterIsSuperAdmin() throws Exception {
         String requestBody = readFixture("create-family-group-request-valid.json");
@@ -79,6 +89,62 @@ class FamilyGroupControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    void shouldPassRequestedMemberIdsToTheServiceWhenCreatingAGroupWithItsMembers() throws Exception {
+        String requestBody = readFixture("create-family-group-request-with-members.json");
+        when(familyGroupService.createFamilyGroup(any(AuthenticatedUser.class), any(CreateFamilyGroupRequest.class)))
+                .thenReturn(familyGroupResponse());
+
+        mockMvc.perform(post("/api/family-groups")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated());
+
+        verify(familyGroupService).createFamilyGroup(any(AuthenticatedUser.class),
+                eq(new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 11L))));
+    }
+
+    @Test
+    void shouldReturnConflictWhenAMemberAlreadyBelongsToAFamilyGroup() throws Exception {
+        String requestBody = readFixture("create-family-group-request-with-members.json");
+        when(familyGroupService.createFamilyGroup(any(AuthenticatedUser.class), any(CreateFamilyGroupRequest.class)))
+                .thenThrow(new MemberAlreadyInFamilyGroupException(List.of(11L)));
+
+        mockMvc.perform(post("/api/family-groups")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", is("Member(s) [11] already belong to a family group")));
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenARequestedMemberIsNotInTheClub() throws Exception {
+        String requestBody = readFixture("create-family-group-request-with-members.json");
+        when(familyGroupService.createFamilyGroup(any(AuthenticatedUser.class), any(CreateFamilyGroupRequest.class)))
+                .thenThrow(new MemberNotFoundException(11L));
+
+        mockMvc.perform(post("/api/family-groups")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenMemberIdsContainNull() throws Exception {
+        String requestBody = readFixture("create-family-group-request-null-member-id.json");
+
+        mockMvc.perform(post("/api/family-groups")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+
+        verify(familyGroupService, never()).createFamilyGroup(any(), any());
     }
 
     @Test
@@ -163,6 +229,31 @@ class FamilyGroupControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldDeleteFamilyGroupAndReturnNoContentWhenRequesterIsAdmin() throws Exception {
+        mockMvc.perform(delete("/api/family-groups/{familyGroupId}", FAMILY_GROUP_ID).with(asAdmin()))
+                .andExpect(status().isNoContent());
+
+        verify(familyGroupService).deleteFamilyGroup(any(AuthenticatedUser.class), eq(FAMILY_GROUP_ID));
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenDeletingMissingFamilyGroup() throws Exception {
+        doThrow(new FamilyGroupNotFoundException(FAMILY_GROUP_ID)).when(familyGroupService)
+                .deleteFamilyGroup(any(AuthenticatedUser.class), eq(FAMILY_GROUP_ID));
+
+        mockMvc.perform(delete("/api/family-groups/{familyGroupId}", FAMILY_GROUP_ID).with(asSuperAdmin()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenMemberDeletesFamilyGroup() throws Exception {
+        mockMvc.perform(delete("/api/family-groups/{familyGroupId}", FAMILY_GROUP_ID).with(asMember()))
+                .andExpect(status().isForbidden());
+
+        verify(familyGroupService, never()).deleteFamilyGroup(any(), any());
     }
 
     private FamilyGroupResponse familyGroupResponse() {

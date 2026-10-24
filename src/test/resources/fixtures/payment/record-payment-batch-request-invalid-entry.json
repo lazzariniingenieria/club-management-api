@@ -1,0 +1,16 @@
+{
+  "payments": [
+    {
+      "memberId": 1,
+      "amount": 15000,
+      "periodsCovered": ["2026-07-01"],
+      "paymentMethod": "CASH"
+    },
+    {
+      "memberId": 2,
+      "amount": 0,
+      "periodsCovered": ["2026-07-01"],
+      "paymentMethod": "CASH"
+    }
+  ]
+}

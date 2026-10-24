@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentBatchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.VoidPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
@@ -256,6 +257,54 @@ class PaymentServiceTest {
         List<PaymentResponse> response = paymentService.recordPayment(CURRENT_USER, request);
 
         assertThat(response).hasSize(1);
+    }
+
+    @Test
+    void shouldRecordEveryEntryOfTheBatchAndReturnAllPaymentsTogether() {
+        LocalDate period = LocalDate.parse("2026-07-01");
+        RecordPaymentRequest firstEntry = new RecordPaymentRequest(MEMBER_ID, null, AMOUNT, List.of(period), PaymentMethod.CASH);
+        RecordPaymentRequest secondEntry = new RecordPaymentRequest(OTHER_MEMBER_ID, MEMBER_ID, AMOUNT, List.of(period),
+                PaymentMethod.CASH);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, 9L)));
+        when(memberRepository.findByIdAndClubId(OTHER_MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(OTHER_MEMBER_ID, 9L)));
+        when(paymentRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<PaymentResponse> response = paymentService.recordPaymentBatch(CURRENT_USER,
+                new RecordPaymentBatchRequest(List.of(firstEntry, secondEntry)));
+
+        assertThat(response).extracting(PaymentResponse::memberId).containsExactly(MEMBER_ID, OTHER_MEMBER_ID);
+        assertThat(response).extracting(PaymentResponse::paidByMemberId).containsExactly(null, MEMBER_ID);
+        assertThat(response).extracting(PaymentResponse::recordedByUserId).containsOnly(ACTING_USER_ID);
+    }
+
+    @Test
+    void shouldFailTheWholeBatchNamingTheMemberWhenOneEntryHasAPeriodAlreadyPaid() {
+        LocalDate period = LocalDate.parse("2026-07-01");
+        RecordPaymentRequest firstEntry = new RecordPaymentRequest(MEMBER_ID, null, AMOUNT, List.of(period), PaymentMethod.CASH);
+        RecordPaymentRequest secondEntry = new RecordPaymentRequest(OTHER_MEMBER_ID, null, AMOUNT, List.of(period), PaymentMethod.CASH);
+        RecordPaymentBatchRequest request = new RecordPaymentBatchRequest(List.of(firstEntry, secondEntry));
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
+        when(memberRepository.findByIdAndClubId(OTHER_MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(OTHER_MEMBER_ID, null)));
+        when(paymentRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentRepository.findByMemberIdAndVoidedAtIsNullAndPeriodCoveredIn(MEMBER_ID, List.of(period))).thenReturn(List.of());
+        when(paymentRepository.findByMemberIdAndVoidedAtIsNullAndPeriodCoveredIn(OTHER_MEMBER_ID, List.of(period)))
+                .thenReturn(List.of(payment(OTHER_MEMBER_ID, period)));
+
+        assertThatThrownBy(() -> paymentService.recordPaymentBatch(CURRENT_USER, request))
+                .isInstanceOf(PeriodAlreadyPaidException.class)
+                .hasMessageContaining("memberId " + OTHER_MEMBER_ID);
+    }
+
+    @Test
+    void shouldFailTheWholeBatchWhenAnEntryBelongsToAMemberOutsideTheClub() {
+        LocalDate period = LocalDate.parse("2026-07-01");
+        RecordPaymentRequest entry = new RecordPaymentRequest(MEMBER_ID, null, AMOUNT, List.of(period), PaymentMethod.CASH);
+        RecordPaymentBatchRequest request = new RecordPaymentBatchRequest(List.of(entry));
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> paymentService.recordPaymentBatch(CURRENT_USER, request)).isInstanceOf(MemberNotFoundException.class);
+
+        verify(paymentRepository, never()).saveAll(any());
     }
 
     @Test

@@ -14,6 +14,8 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
 
     boolean existsByClubIdAndDniAndIdNot(Long clubId, String dni, Long id);
 
+    Optional<UserAccount> findByIdAndClubId(Long id, Long clubId);
+
     Optional<UserAccount> findByIdAndClubIdAndRole(Long id, Long clubId, UserRole role);
 
     List<UserAccount> findByClubIdAndRoleOrderByCreatedAtDesc(Long clubId, UserRole role);

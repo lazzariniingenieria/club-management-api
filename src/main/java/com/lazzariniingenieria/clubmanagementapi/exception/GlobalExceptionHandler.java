@@ -71,6 +71,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(MemberAlreadyInFamilyGroupException.class)
+    public ResponseEntity<ApiErrorDto> handleMemberAlreadyInFamilyGroup(MemberAlreadyInFamilyGroupException exception) {
+        log.warn("Rejected family group creation with already grouped member(s): {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(PaidByMemberNotInFamilyGroupException.class)
     public ResponseEntity<ApiErrorDto> handlePaidByMemberNotInFamilyGroup(PaidByMemberNotInFamilyGroupException exception) {
         log.warn("Rejected payment due to family group mismatch: {}", exception.getMessage());
