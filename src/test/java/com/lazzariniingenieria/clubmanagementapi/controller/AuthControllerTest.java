@@ -16,6 +16,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidRefreshTokenException;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.AuthService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,6 +43,9 @@ class AuthControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnTokenUserAccountIdRoleAndMemberIdWhenCredentialsAreValid() throws Exception {

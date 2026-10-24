@@ -19,6 +19,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidDateRangeException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.FeeReceiptService;
 import java.time.LocalDate;
 import java.util.List;
@@ -54,6 +55,9 @@ class FeeReceiptControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnThePdfAsADownloadableAttachmentWhenRequesterIsAdmin() throws Exception {

@@ -9,6 +9,8 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +37,8 @@ class JwtServiceTest {
 
         String token = jwtService.generateToken(user);
 
-        AuthenticatedUser authenticatedUser = jwtService.extractAuthenticatedUser(token);
+        AccessTokenClaims accessToken = jwtService.parseAccessToken(token);
+        AuthenticatedUser authenticatedUser = accessToken.authenticatedUser();
         assertThat(authenticatedUser.userAccountId()).isEqualTo(1L);
         assertThat(authenticatedUser.clubId()).isEqualTo(10L);
         assertThat(authenticatedUser.role()).isEqualTo(UserRole.ADMIN);
@@ -74,7 +77,26 @@ class JwtServiceTest {
 
         String token = jwtService.generateToken(user);
 
-        assertThat(jwtService.extractAuthenticatedUser(token).memberId()).isNull();
+        AccessTokenClaims accessToken = jwtService.parseAccessToken(token);
+
+        assertThat(accessToken.authenticatedUser().memberId()).isNull();
+    }
+
+    @Test
+    void shouldExtractIssuedAtTruncatedToTheSecondSoSessionChecksCanCompareItWithAPasswordChange() {
+        UserAccount user = UserAccount.builder()
+                .id(1L)
+                .clubId(10L)
+                .dni("30111222")
+                .role(UserRole.ADMIN)
+                .build();
+        Instant beforeIssuing = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+        String token = jwtService.generateToken(user);
+
+        AccessTokenClaims accessToken = jwtService.parseAccessToken(token);
+        assertThat(accessToken.issuedAt()).isBetween(beforeIssuing, Instant.now());
+        assertThat(accessToken.issuedAt().getNano()).isZero();
     }
 
     @Test
@@ -94,7 +116,7 @@ class JwtServiceTest {
         String token = jwtService.generateToken(user);
         String tamperedToken = token.substring(0, token.length() - 1) + (token.endsWith("A") ? "B" : "A");
 
-        assertThatThrownBy(() -> jwtService.extractAuthenticatedUser(tamperedToken)).isInstanceOf(JwtException.class);
+        assertThatThrownBy(() -> jwtService.parseAccessToken(tamperedToken)).isInstanceOf(JwtException.class);
     }
 
     @Test
@@ -109,6 +131,6 @@ class JwtServiceTest {
         JwtService otherJwtService = new JwtService("a-completely-different-secret-key-32-bytes-min", 3_600_000L);
         String token = otherJwtService.generateToken(user);
 
-        assertThatThrownBy(() -> jwtService.extractAuthenticatedUser(token)).isInstanceOf(JwtException.class);
+        assertThatThrownBy(() -> jwtService.parseAccessToken(token)).isInstanceOf(JwtException.class);
     }
 }

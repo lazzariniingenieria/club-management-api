@@ -205,10 +205,23 @@ class AdminServiceTest {
     }
 
     @Test
+    void shouldRevokeRefreshTokensWhenDeactivatingAdminSoReactivatingItDoesNotRestoreOldSessions() {
+        UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
+
+        adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID);
+
+        verify(refreshTokenService).revokeActiveTokens(ADMIN_ID);
+    }
+
+    @Test
     void shouldThrowAdminNotFoundWhenDeactivatingMissingAdmin() {
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID)).isInstanceOf(AdminNotFoundException.class);
+
+        verifyNoInteractions(refreshTokenService);
     }
 
     @Test
@@ -285,6 +298,19 @@ class AdminServiceTest {
         assertThat(existingAdmin.getUpdatedAt()).isNotEqualTo(CREATED_AT);
         assertThat(response.id()).isEqualTo(ADMIN_ID);
         verify(refreshTokenService).revokeActiveTokens(ADMIN_ID);
+    }
+
+    @Test
+    void shouldRecordWhenThePasswordWasResetSoAccessTokensIssuedBeforeStopWorking() {
+        UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
+        ResetAdminPasswordRequest request = new ResetAdminPasswordRequest("brand-new-password");
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
+        Instant beforeReset = Instant.now();
+
+        adminService.resetPassword(CURRENT_USER, ADMIN_ID, request);
+
+        assertThat(existingAdmin.getPasswordChangedAt()).isBetween(beforeReset, Instant.now());
     }
 
     @Test

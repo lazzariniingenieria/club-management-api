@@ -96,6 +96,7 @@ public class AdminService {
         return adminMapper.toResponse(savedAdmin);
     }
 
+    @Transactional
     public AdminResponse deactivateAdmin(AuthenticatedUser currentUser, Long adminId) {
         Long clubId = currentUser.clubId();
         UserAccount admin = findAdminOrThrow(clubId, adminId);
@@ -103,6 +104,7 @@ public class AdminService {
         markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
+        refreshTokenService.revokeActiveTokens(adminId);
         log.info("Deactivated admin userAccountId={} for clubId={}", adminId, clubId);
 
         return adminMapper.toResponse(savedAdmin);
@@ -125,6 +127,7 @@ public class AdminService {
         Long clubId = currentUser.clubId();
         UserAccount admin = findAdminOrThrow(clubId, adminId);
         admin.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        admin.setPasswordChangedAt(Instant.now());
         markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);

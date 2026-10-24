@@ -21,6 +21,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundExceptio
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.AdminService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -54,6 +55,9 @@ class AdminControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnCreatedAdminWhenRequesterIsSuperAdmin() throws Exception {

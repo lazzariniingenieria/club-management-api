@@ -42,14 +42,16 @@ public class JwtService {
                 .compact();
     }
 
-    public AuthenticatedUser extractAuthenticatedUser(String token) {
+    public AccessTokenClaims parseAccessToken(String token) {
         Claims claims = parseClaims(token);
-
-        return new AuthenticatedUser(
+        AuthenticatedUser authenticatedUser = new AuthenticatedUser(
                 claims.get("userAccountId", Long.class),
                 claims.get("clubId", Long.class),
                 UserRole.valueOf(claims.get("role", String.class)),
                 claims.get("memberId", Long.class));
+        Date issuedAt = claims.getIssuedAt();
+
+        return new AccessTokenClaims(authenticatedUser, issuedAt.toInstant());
     }
 
     private Claims parseClaims(String token) {

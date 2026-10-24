@@ -32,6 +32,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.PaymentNotFoundExcept
 import com.lazzariniingenieria.clubmanagementapi.exception.PeriodAlreadyPaidException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.PaymentService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -69,6 +70,9 @@ class PaymentControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnCreatedPaymentsWhenRequesterIsAdmin() throws Exception {

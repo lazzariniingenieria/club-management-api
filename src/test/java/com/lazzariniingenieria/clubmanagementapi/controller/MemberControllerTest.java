@@ -23,6 +23,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundEx
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.MemberService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,6 +58,9 @@ class MemberControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnCreatedMemberWhenRequesterIsSuperAdmin() throws Exception {

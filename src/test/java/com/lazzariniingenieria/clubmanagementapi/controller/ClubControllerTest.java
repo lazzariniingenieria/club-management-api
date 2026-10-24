@@ -20,6 +20,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.ClubNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.ClubService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -53,6 +54,9 @@ class ClubControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnClubOfTheTokenWhenRequesterIsAdmin() throws Exception {

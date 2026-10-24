@@ -19,6 +19,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.FamilyGroupService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -52,6 +53,9 @@ class FamilyGroupControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnCreatedFamilyGroupWhenRequesterIsSuperAdmin() throws Exception {
