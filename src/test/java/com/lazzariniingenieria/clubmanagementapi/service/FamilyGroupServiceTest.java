@@ -17,6 +17,8 @@ import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberAlreadyInFamilyGroupException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.FamilyGroupMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.FamilyGroupMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.FamilyGroupRepository;
@@ -25,6 +27,7 @@ import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,7 +63,7 @@ class FamilyGroupServiceTest {
 
     @Test
     void shouldCreateFamilyGroup() {
-        CreateFamilyGroupRequest request = new CreateFamilyGroupRequest("Familia Gomez");
+        CreateFamilyGroupRequest request = new CreateFamilyGroupRequest("Familia Gomez", null);
         when(familyGroupRepository.save(any(FamilyGroup.class))).thenReturn(familyGroup());
 
         FamilyGroupResponse response = familyGroupService.createFamilyGroup(CURRENT_USER, request);
@@ -80,6 +83,68 @@ class FamilyGroupServiceTest {
         assertThat(response.createdByUserId()).isEqualTo(ACTING_USER_ID);
         assertThat(response.updatedByUserId()).isEqualTo(ACTING_USER_ID);
         assertThat(response.updatedAt()).isEqualTo(CREATED_AT);
+    }
+
+    @Test
+    void shouldNotLookUpOrLockMembersWhenCreatingAGroupWithoutMembers() {
+        when(familyGroupRepository.save(any(FamilyGroup.class))).thenReturn(familyGroup());
+
+        familyGroupService.createFamilyGroup(CURRENT_USER, new CreateFamilyGroupRequest("Familia Gomez", List.of()));
+
+        verify(memberRepository, never()).findByClubIdAndIdInForUpdate(any(), any());
+    }
+
+    @Test
+    void shouldAssignEveryRequestedMemberToTheNewGroupInTheSameOperation() {
+        List<Member> members = List.of(member(10L, null), member(11L, null));
+        when(memberRepository.findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L, 11L))).thenReturn(members);
+        when(familyGroupRepository.save(any(FamilyGroup.class))).thenReturn(familyGroup());
+
+        familyGroupService.createFamilyGroup(CURRENT_USER, new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 11L)));
+
+        assertThat(members).allSatisfy(member -> {
+            assertThat(member.getFamilyGroupId()).isEqualTo(FAMILY_GROUP_ID);
+            assertThat(member.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+            assertThat(member.getUpdatedAt()).isNotEqualTo(CREATED_AT);
+        });
+        verify(memberRepository).saveAll(members);
+    }
+
+    @Test
+    void shouldLookUpEachMemberOnceWhenTheRequestRepeatsAMemberId() {
+        when(memberRepository.findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L))).thenReturn(List.of(member(10L, null)));
+        when(familyGroupRepository.save(any(FamilyGroup.class))).thenReturn(familyGroup());
+
+        familyGroupService.createFamilyGroup(CURRENT_USER, new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 10L)));
+
+        verify(memberRepository).findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L));
+    }
+
+    @Test
+    void shouldRejectGroupCreationWithoutSavingAnythingWhenAMemberIsNotInTheClub() {
+        when(memberRepository.findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L, 11L))).thenReturn(List.of(member(10L, null)));
+        CreateFamilyGroupRequest request = new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 11L));
+
+        assertThatThrownBy(() -> familyGroupService.createFamilyGroup(CURRENT_USER, request))
+                .isInstanceOf(MemberNotFoundException.class)
+                .hasMessage("Member 11 not found");
+
+        verify(familyGroupRepository, never()).save(any());
+        verify(memberRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void shouldRejectGroupCreationWithoutSavingAnythingWhenAMemberAlreadyBelongsToAGroup() {
+        List<Member> members = List.of(member(10L, null), member(11L, 7L));
+        when(memberRepository.findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L, 11L))).thenReturn(members);
+        CreateFamilyGroupRequest request = new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 11L));
+
+        assertThatThrownBy(() -> familyGroupService.createFamilyGroup(CURRENT_USER, request))
+                .isInstanceOf(MemberAlreadyInFamilyGroupException.class)
+                .hasMessage("Member(s) [11] already belong to a family group");
+
+        verify(familyGroupRepository, never()).save(any());
+        verify(memberRepository, never()).saveAll(any());
     }
 
     @Test

@@ -201,6 +201,18 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnConflictWithExceptionMessageWhenAMemberAlreadyBelongsToAFamilyGroup() {
+        MemberAlreadyInFamilyGroupException exception = new MemberAlreadyInFamilyGroupException(List.of(10L, 11L));
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleMemberAlreadyInFamilyGroup(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.message()).isEqualTo("Member(s) [10, 11] already belong to a family group");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
     void shouldReturnConflictWithExceptionMessageWhenPeriodIsAlreadyPaid() {
         PeriodAlreadyPaidException exception = new PeriodAlreadyPaidException(42L, List.of(LocalDate.parse("2026-07-01")));
 

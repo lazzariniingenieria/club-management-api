@@ -21,6 +21,8 @@ import com.lazzariniingenieria.clubmanagementapi.dto.FamilyGroupResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateFamilyGroupRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberAlreadyInFamilyGroupException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
 import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
@@ -87,6 +89,62 @@ class FamilyGroupControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    void shouldPassRequestedMemberIdsToTheServiceWhenCreatingAGroupWithItsMembers() throws Exception {
+        String requestBody = readFixture("create-family-group-request-with-members.json");
+        when(familyGroupService.createFamilyGroup(any(AuthenticatedUser.class), any(CreateFamilyGroupRequest.class)))
+                .thenReturn(familyGroupResponse());
+
+        mockMvc.perform(post("/api/family-groups")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated());
+
+        verify(familyGroupService).createFamilyGroup(any(AuthenticatedUser.class),
+                eq(new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 11L))));
+    }
+
+    @Test
+    void shouldReturnConflictWhenAMemberAlreadyBelongsToAFamilyGroup() throws Exception {
+        String requestBody = readFixture("create-family-group-request-with-members.json");
+        when(familyGroupService.createFamilyGroup(any(AuthenticatedUser.class), any(CreateFamilyGroupRequest.class)))
+                .thenThrow(new MemberAlreadyInFamilyGroupException(List.of(11L)));
+
+        mockMvc.perform(post("/api/family-groups")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", is("Member(s) [11] already belong to a family group")));
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenARequestedMemberIsNotInTheClub() throws Exception {
+        String requestBody = readFixture("create-family-group-request-with-members.json");
+        when(familyGroupService.createFamilyGroup(any(AuthenticatedUser.class), any(CreateFamilyGroupRequest.class)))
+                .thenThrow(new MemberNotFoundException(11L));
+
+        mockMvc.perform(post("/api/family-groups")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenMemberIdsContainNull() throws Exception {
+        String requestBody = readFixture("create-family-group-request-null-member-id.json");
+
+        mockMvc.perform(post("/api/family-groups")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+
+        verify(familyGroupService, never()).createFamilyGroup(any(), any());
     }
 
     @Test
