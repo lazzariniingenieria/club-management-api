@@ -21,5 +21,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     List<Member> findByClubIdAndStatusOrderByCreatedAtDesc(Long clubId, MemberStatus status);
 
+    List<Member> findByClubIdAndFamilyGroupId(Long clubId, Long familyGroupId);
+
     List<Member> findByClubIdAndIdIn(Long clubId, Collection<Long> ids);
 }

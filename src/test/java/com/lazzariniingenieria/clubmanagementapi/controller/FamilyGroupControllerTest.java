@@ -3,8 +3,12 @@ package com.lazzariniingenieria.clubmanagementapi.controller;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -167,6 +171,31 @@ class FamilyGroupControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldDeleteFamilyGroupAndReturnNoContentWhenRequesterIsAdmin() throws Exception {
+        mockMvc.perform(delete("/api/family-groups/{familyGroupId}", FAMILY_GROUP_ID).with(asAdmin()))
+                .andExpect(status().isNoContent());
+
+        verify(familyGroupService).deleteFamilyGroup(any(AuthenticatedUser.class), eq(FAMILY_GROUP_ID));
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenDeletingMissingFamilyGroup() throws Exception {
+        doThrow(new FamilyGroupNotFoundException(FAMILY_GROUP_ID)).when(familyGroupService)
+                .deleteFamilyGroup(any(AuthenticatedUser.class), eq(FAMILY_GROUP_ID));
+
+        mockMvc.perform(delete("/api/family-groups/{familyGroupId}", FAMILY_GROUP_ID).with(asSuperAdmin()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenMemberDeletesFamilyGroup() throws Exception {
+        mockMvc.perform(delete("/api/family-groups/{familyGroupId}", FAMILY_GROUP_ID).with(asMember()))
+                .andExpect(status().isForbidden());
+
+        verify(familyGroupService, never()).deleteFamilyGroup(any(), any());
     }
 
     private FamilyGroupResponse familyGroupResponse() {

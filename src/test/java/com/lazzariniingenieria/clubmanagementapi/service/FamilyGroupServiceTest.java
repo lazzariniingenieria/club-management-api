@@ -3,18 +3,24 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateFamilyGroupRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.FamilyGroupResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateFamilyGroupRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.FamilyGroup;
+import com.lazzariniingenieria.clubmanagementapi.entity.Member;
+import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.FamilyGroupMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.FamilyGroupMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.FamilyGroupRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
 import java.util.List;
@@ -23,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -39,13 +46,16 @@ class FamilyGroupServiceTest {
     @Mock
     private FamilyGroupRepository familyGroupRepository;
 
+    @Mock
+    private MemberRepository memberRepository;
+
     private final FamilyGroupMapper familyGroupMapper = new FamilyGroupMapperImpl();
 
     private FamilyGroupService familyGroupService;
 
     @BeforeEach
     void setUp() {
-        familyGroupService = new FamilyGroupService(familyGroupRepository, familyGroupMapper);
+        familyGroupService = new FamilyGroupService(familyGroupRepository, familyGroupMapper, memberRepository);
     }
 
     @Test
@@ -123,6 +133,58 @@ class FamilyGroupServiceTest {
                 .isInstanceOf(FamilyGroupNotFoundException.class);
     }
 
+    @Test
+    void shouldUnassignEveryMemberOfTheGroupAndRecordWhoDidIt() {
+        Member firstMember = member(10L, FAMILY_GROUP_ID);
+        Member secondMember = member(11L, FAMILY_GROUP_ID);
+        when(familyGroupRepository.findByIdAndClubId(FAMILY_GROUP_ID, CLUB_ID)).thenReturn(Optional.of(familyGroup()));
+        when(memberRepository.findByClubIdAndFamilyGroupId(CLUB_ID, FAMILY_GROUP_ID)).thenReturn(List.of(firstMember, secondMember));
+
+        familyGroupService.deleteFamilyGroup(CURRENT_USER, FAMILY_GROUP_ID);
+
+        assertThat(List.of(firstMember, secondMember)).allSatisfy(member -> {
+            assertThat(member.getFamilyGroupId()).isNull();
+            assertThat(member.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+            assertThat(member.getUpdatedAt()).isNotEqualTo(CREATED_AT);
+        });
+    }
+
+    @Test
+    void shouldFlushTheUnassignedMembersBeforeDeletingTheGroupSoTheForeignKeyNeverPointsToAMissingGroup() {
+        FamilyGroup existingFamilyGroup = familyGroup();
+        List<Member> members = List.of(member(10L, FAMILY_GROUP_ID));
+        when(familyGroupRepository.findByIdAndClubId(FAMILY_GROUP_ID, CLUB_ID)).thenReturn(Optional.of(existingFamilyGroup));
+        when(memberRepository.findByClubIdAndFamilyGroupId(CLUB_ID, FAMILY_GROUP_ID)).thenReturn(members);
+
+        familyGroupService.deleteFamilyGroup(CURRENT_USER, FAMILY_GROUP_ID);
+
+        InOrder deletionOrder = inOrder(memberRepository, familyGroupRepository);
+        deletionOrder.verify(memberRepository).saveAllAndFlush(members);
+        deletionOrder.verify(familyGroupRepository).delete(existingFamilyGroup);
+    }
+
+    @Test
+    void shouldDeleteFamilyGroupThatHasNoMembers() {
+        FamilyGroup existingFamilyGroup = familyGroup();
+        when(familyGroupRepository.findByIdAndClubId(FAMILY_GROUP_ID, CLUB_ID)).thenReturn(Optional.of(existingFamilyGroup));
+        when(memberRepository.findByClubIdAndFamilyGroupId(CLUB_ID, FAMILY_GROUP_ID)).thenReturn(List.of());
+
+        familyGroupService.deleteFamilyGroup(CURRENT_USER, FAMILY_GROUP_ID);
+
+        verify(familyGroupRepository).delete(existingFamilyGroup);
+    }
+
+    @Test
+    void shouldThrowFamilyGroupNotFoundWithoutTouchingMembersWhenDeletingMissingFamilyGroup() {
+        when(familyGroupRepository.findByIdAndClubId(FAMILY_GROUP_ID, CLUB_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> familyGroupService.deleteFamilyGroup(CURRENT_USER, FAMILY_GROUP_ID))
+                .isInstanceOf(FamilyGroupNotFoundException.class);
+
+        verifyNoInteractions(memberRepository);
+        verify(familyGroupRepository, never()).delete(any());
+    }
+
     private FamilyGroup familyGroup() {
         return familyGroup(ACTING_USER_ID);
     }
@@ -136,6 +198,22 @@ class FamilyGroupServiceTest {
                 .updatedAt(CREATED_AT)
                 .createdByUserId(actorId)
                 .updatedByUserId(actorId)
+                .build();
+    }
+
+    private Member member(Long memberId, Long familyGroupId) {
+        return Member.builder()
+                .id(memberId)
+                .clubId(CLUB_ID)
+                .familyGroupId(familyGroupId)
+                .firstName("Marcos")
+                .lastName("Gomez")
+                .dni("30111" + memberId)
+                .status(MemberStatus.ACTIVE)
+                .createdAt(CREATED_AT)
+                .updatedAt(CREATED_AT)
+                .createdByUserId(PREVIOUS_ACTOR_ID)
+                .updatedByUserId(PREVIOUS_ACTOR_ID)
                 .build();
     }
 }
