@@ -101,6 +101,7 @@ public class AdminService {
         Long clubId = currentUser.clubId();
         UserAccount admin = findAdminOrThrow(clubId, adminId);
         admin.setActive(false);
+        admin.setSessionsRevokedAt(Instant.now());
         markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
@@ -127,7 +128,7 @@ public class AdminService {
         Long clubId = currentUser.clubId();
         UserAccount admin = findAdminOrThrow(clubId, adminId);
         admin.setPasswordHash(passwordEncoder.encode(request.newPassword()));
-        admin.setPasswordChangedAt(Instant.now());
+        admin.setSessionsRevokedAt(Instant.now());
         markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);

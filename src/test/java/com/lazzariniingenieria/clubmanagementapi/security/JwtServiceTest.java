@@ -83,7 +83,7 @@ class JwtServiceTest {
     }
 
     @Test
-    void shouldExtractIssuedAtTruncatedToTheSecondSoSessionChecksCanCompareItWithAPasswordChange() {
+    void shouldExtractIssuedAtTruncatedToTheSecondSoSessionChecksCanCompareItWithASessionsRevocation() {
         UserAccount user = UserAccount.builder()
                 .id(1L)
                 .clubId(10L)

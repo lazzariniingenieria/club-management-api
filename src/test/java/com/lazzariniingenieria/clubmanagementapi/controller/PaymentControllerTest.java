@@ -1,6 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -155,6 +156,20 @@ class PaymentControllerTest {
     }
 
     @Test
+    void shouldReturnBadRequestWhenABatchEntryIsNull() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-null-entry.json");
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem("payments[0]: payments must not contain null entries")));
+
+        verify(paymentService, never()).recordPaymentBatch(any(), any());
+    }
+
+    @Test
     void shouldReturnBadRequestNamingTheEntryWhenABatchEntryIsInvalid() throws Exception {
         String requestBody = readFixture("record-payment-batch-request-invalid-entry.json");
 
@@ -238,7 +253,7 @@ class PaymentControllerTest {
     void shouldReturnBadRequestWhenPeriodsCoveredContainDuplicates() throws Exception {
         String requestBody = readFixture("record-payment-request-valid.json");
         when(paymentService.recordPayment(any(AuthenticatedUser.class), any(RecordPaymentRequest.class)))
-                .thenThrow(new DuplicatePeriodCoveredException());
+                .thenThrow(new DuplicatePeriodCoveredException(MEMBER_ID));
 
         mockMvc.perform(post("/api/payments")
                         .with(asAdmin())

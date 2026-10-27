@@ -76,7 +76,7 @@ public class AuthService {
         UserAccount account = findAuthenticatedAccountOrThrow(userAccountId, clubId);
         Instant now = Instant.now();
         account.setPasswordHash(passwordEncoder.encode(request.newPassword()));
-        account.setPasswordChangedAt(now);
+        account.setSessionsRevokedAt(now);
         account.setUpdatedAt(now);
         account.setUpdatedByUserId(userAccountId);
 

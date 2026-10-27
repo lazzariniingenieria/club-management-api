@@ -57,21 +57,21 @@ class AccountSessionServiceTest {
     }
 
     @Test
-    void shouldRejectTokenIssuedBeforeThePasswordWasChanged() {
+    void shouldRejectTokenIssuedBeforeTheSessionsWereRevoked() {
         stubAccount(account(true, Instant.parse("2026-10-24T12:00:01Z")));
 
         assertThat(accountSessionService.isSessionValid(ACCESS_TOKEN)).isFalse();
     }
 
     @Test
-    void shouldAcceptTokenIssuedAfterThePasswordWasChanged() {
+    void shouldAcceptTokenIssuedAfterTheSessionsWereRevoked() {
         stubAccount(account(true, Instant.parse("2026-10-24T11:59:59Z")));
 
         assertThat(accountSessionService.isSessionValid(ACCESS_TOKEN)).isTrue();
     }
 
     @Test
-    void shouldAcceptTokenIssuedWithinTheSameSecondAsThePasswordChangeBecauseIssuedAtHasNoMilliseconds() {
+    void shouldAcceptTokenIssuedWithinTheSameSecondAsTheSessionsRevocationBecauseIssuedAtHasNoMilliseconds() {
         stubAccount(account(true, Instant.parse("2026-10-24T12:00:00.750Z")));
 
         assertThat(accountSessionService.isSessionValid(ACCESS_TOKEN)).isTrue();
@@ -81,13 +81,13 @@ class AccountSessionServiceTest {
         when(userAccountRepository.findByIdAndClubId(USER_ACCOUNT_ID, CLUB_ID)).thenReturn(Optional.of(account));
     }
 
-    private UserAccount account(boolean active, Instant passwordChangedAt) {
+    private UserAccount account(boolean active, Instant sessionsRevokedAt) {
         return UserAccount.builder()
                 .id(USER_ACCOUNT_ID)
                 .clubId(CLUB_ID)
                 .role(UserRole.ADMIN)
                 .active(active)
-                .passwordChangedAt(passwordChangedAt)
+                .sessionsRevokedAt(sessionsRevokedAt)
                 .build();
     }
 }

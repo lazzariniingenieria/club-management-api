@@ -107,7 +107,7 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void shouldNotAuthenticateWhenTokenIsValidButTheSessionWasCutByDeactivationOrPasswordChange() throws Exception {
+    void shouldNotAuthenticateWhenTokenIsValidButTheSessionWasCutByDeactivationOrSessionsRevocation() throws Exception {
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(1L, 10L, UserRole.ADMIN, 5L);
         AccessTokenClaims accessToken = new AccessTokenClaims(authenticatedUser, ISSUED_AT);
         when(request.getHeader(AUTHORIZATION_HEADER)).thenReturn("Bearer " + TOKEN);

@@ -310,7 +310,7 @@ class AdminServiceTest {
 
         adminService.resetPassword(CURRENT_USER, ADMIN_ID, request);
 
-        assertThat(existingAdmin.getPasswordChangedAt()).isBetween(beforeReset, Instant.now());
+        assertThat(existingAdmin.getSessionsRevokedAt()).isBetween(beforeReset, Instant.now());
     }
 
     @Test

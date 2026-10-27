@@ -56,8 +56,8 @@ public class UserAccount {
     @Builder.Default
     private boolean active = true;
 
-    @Column(name = "password_changed_at")
-    private Instant passwordChangedAt;
+    @Column(name = "sessions_revoked_at")
+    private Instant sessionsRevokedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

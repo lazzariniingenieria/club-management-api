@@ -125,7 +125,7 @@ public class PaymentService {
         Long clubId = currentUser.clubId();
         Member member = findMemberOrThrow(clubId, request.memberId());
         Long paidByMemberId = resolvePaidByMemberId(clubId, member, request.paidByMemberId());
-        validateDistinctPeriods(request.periodsCovered());
+        validateDistinctPeriods(request.memberId(), request.periodsCovered());
         rejectIfAnyPeriodAlreadyPaid(request.memberId(), request.periodsCovered());
 
         List<Payment> payments = buildPayments(request, paidByMemberId, currentUser.userAccountId());
@@ -202,11 +202,11 @@ public class PaymentService {
         return paidByMemberId;
     }
 
-    private void validateDistinctPeriods(List<LocalDate> periodsCovered) {
+    private void validateDistinctPeriods(Long memberId, List<LocalDate> periodsCovered) {
         long distinctCount = periodsCovered.stream().distinct().count();
 
         if (distinctCount != periodsCovered.size()) {
-            throw new DuplicatePeriodCoveredException();
+            throw new DuplicatePeriodCoveredException(memberId);
         }
     }
 

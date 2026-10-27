@@ -177,14 +177,14 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void shouldReturnBadRequestWithExceptionMessageWhenPeriodsCoveredAreDuplicated() {
-        DuplicatePeriodCoveredException exception = new DuplicatePeriodCoveredException();
+        DuplicatePeriodCoveredException exception = new DuplicatePeriodCoveredException(7L);
 
         ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleDuplicatePeriodCovered(exception);
         ApiErrorDto body = response.getBody();
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(body.status()).isEqualTo(400);
-        assertThat(body.message()).isEqualTo("periodsCovered must not contain duplicate dates");
+        assertThat(body.message()).isEqualTo("periodsCovered of memberId 7 must not contain duplicate dates");
         assertThat(body.details()).isEmpty();
     }
 

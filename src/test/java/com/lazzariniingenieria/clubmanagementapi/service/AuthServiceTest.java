@@ -182,8 +182,8 @@ class AuthServiceTest {
         authService.changeOwnPassword(ADMIN, new ChangeOwnPasswordRequest("brand-new-password"));
 
         assertThat(admin.getPasswordHash()).isEqualTo("new-hashed-password");
-        assertThat(admin.getPasswordChangedAt()).isBetween(beforeChange, Instant.now());
-        assertThat(admin.getUpdatedAt()).isEqualTo(admin.getPasswordChangedAt());
+        assertThat(admin.getSessionsRevokedAt()).isBetween(beforeChange, Instant.now());
+        assertThat(admin.getUpdatedAt()).isEqualTo(admin.getSessionsRevokedAt());
         assertThat(admin.getUpdatedByUserId()).isEqualTo(ADMIN_ID);
         verify(userAccountRepository).save(admin);
     }

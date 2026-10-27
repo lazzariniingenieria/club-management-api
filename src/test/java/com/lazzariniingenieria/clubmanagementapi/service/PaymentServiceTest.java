@@ -211,7 +211,8 @@ class PaymentServiceTest {
         when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
 
         assertThatThrownBy(() -> paymentService.recordPayment(CURRENT_USER, request))
-                .isInstanceOf(DuplicatePeriodCoveredException.class);
+                .isInstanceOf(DuplicatePeriodCoveredException.class)
+                .hasMessageContaining("memberId " + MEMBER_ID);
 
         verify(paymentRepository, never()).saveAll(any());
     }

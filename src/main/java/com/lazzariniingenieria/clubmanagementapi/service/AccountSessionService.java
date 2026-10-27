@@ -25,18 +25,18 @@ public class AccountSessionService {
             return false;
         }
 
-        return !issuedBeforePasswordChange(accessToken.issuedAt(), account.get().getPasswordChangedAt());
+        return !issuedBeforeSessionsWereRevoked(accessToken.issuedAt(), account.get().getSessionsRevokedAt());
     }
 
-    // The JWT "iat" claim only keeps whole seconds, so the change instant is truncated the same way; otherwise a token
-    // issued a few milliseconds after the change, within the same second, would be rejected as if it were older.
-    private boolean issuedBeforePasswordChange(Instant issuedAt, Instant passwordChangedAt) {
-        if (passwordChangedAt == null) {
+    // The JWT "iat" claim only keeps whole seconds, so the revocation instant is truncated the same way; otherwise a token
+    // issued a few milliseconds after the revocation, within the same second, would be rejected as if it were older.
+    private boolean issuedBeforeSessionsWereRevoked(Instant issuedAt, Instant sessionsRevokedAt) {
+        if (sessionsRevokedAt == null) {
             return false;
         }
 
-        Instant passwordChangedAtSecond = passwordChangedAt.truncatedTo(ChronoUnit.SECONDS);
+        Instant sessionsRevokedAtSecond = sessionsRevokedAt.truncatedTo(ChronoUnit.SECONDS);
 
-        return issuedAt.isBefore(passwordChangedAtSecond);
+        return issuedAt.isBefore(sessionsRevokedAtSecond);
     }
 }
