@@ -30,8 +30,9 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
 
+    @Transactional
     public LoginResponse login(LoginRequest request) {
-        Optional<UserAccount> userAccount = userAccountRepository.findByClubIdAndDni(request.clubId(), request.dni());
+        Optional<UserAccount> userAccount = userAccountRepository.findByClubIdAndDniForUpdate(request.clubId(), request.dni());
 
         if (userAccount.isEmpty()) {
             throw loginRejected(request);
@@ -54,16 +55,19 @@ public class AuthService {
                 user.getRole(), user.getMemberId());
     }
 
+    // Every path that issues or cuts sessions locks the account row first, so a refresh racing a session cut is serialized
+    // with it instead of leaving behind tokens the cut never saw.
     @Transactional
     public RefreshResponse refresh(RefreshRequest request) {
-        RefreshToken consumedToken = refreshTokenService.consumeToken(request.refreshToken());
-        UserAccount user = userAccountRepository.findById(consumedToken.getUserAccountId())
+        RefreshToken refreshToken = refreshTokenService.findUsableToken(request.refreshToken());
+        UserAccount user = userAccountRepository.findByIdForUpdate(refreshToken.getUserAccountId())
                 .orElseThrow(InvalidRefreshTokenException::new);
 
         if (!user.isActive()) {
             throw new InvalidRefreshTokenException();
         }
 
+        refreshTokenService.rotateOrReject(refreshToken);
         TokenPair tokens = issueTokens(user);
 
         return new RefreshResponse(tokens.accessToken(), tokens.refreshToken(), tokens.expiresIn());
@@ -96,7 +100,7 @@ public class AuthService {
         String missingAccountMessage = "Authenticated userAccountId=" + userAccountId + " has no account in clubId=" + clubId;
 
         return userAccountRepository
-                .findByIdAndClubId(userAccountId, clubId)
+                .findByIdAndClubIdForUpdate(userAccountId, clubId)
                 .orElseThrow(() -> new IllegalStateException(missingAccountMessage));
     }
 

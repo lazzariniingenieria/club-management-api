@@ -192,7 +192,8 @@ class AdminServiceTest {
     @Test
     void shouldDeactivateAdminWhenFound() {
         UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRoleForUpdate(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
+                .thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
         AdminResponse response = adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID);
@@ -207,7 +208,8 @@ class AdminServiceTest {
     @Test
     void shouldRevokeRefreshTokensWhenDeactivatingAdminSoReactivatingItDoesNotRestoreOldSessions() {
         UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRoleForUpdate(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
+                .thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
         adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID);
@@ -219,7 +221,8 @@ class AdminServiceTest {
     void shouldRevokeSessionsWhenDeactivatingAnAdmin() {
         Instant beforeDeactivation = Instant.now();
         UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRoleForUpdate(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
+                .thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
         adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID);
@@ -229,7 +232,7 @@ class AdminServiceTest {
 
     @Test
     void shouldThrowAdminNotFoundWhenDeactivatingMissingAdmin() {
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
+        when(userAccountRepository.findByIdAndClubIdAndRoleForUpdate(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID)).isInstanceOf(AdminNotFoundException.class);
 
@@ -299,7 +302,8 @@ class AdminServiceTest {
     void shouldReplacePasswordHashAndRevokeRefreshTokensWhenResettingPassword() {
         UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
         ResetAdminPasswordRequest request = new ResetAdminPasswordRequest("brand-new-password");
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRoleForUpdate(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
+                .thenReturn(Optional.of(existingAdmin));
         when(passwordEncoder.encode("brand-new-password")).thenReturn("new-hashed-password");
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
 
@@ -316,7 +320,8 @@ class AdminServiceTest {
     void shouldRecordWhenThePasswordWasResetSoAccessTokensIssuedBeforeStopWorking() {
         UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
         ResetAdminPasswordRequest request = new ResetAdminPasswordRequest("brand-new-password");
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.findByIdAndClubIdAndRoleForUpdate(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
+                .thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
         Instant beforeReset = Instant.now();
 
@@ -328,7 +333,7 @@ class AdminServiceTest {
     @Test
     void shouldThrowAdminNotFoundWhenResettingPasswordOfMissingAdmin() {
         ResetAdminPasswordRequest request = new ResetAdminPasswordRequest("brand-new-password");
-        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
+        when(userAccountRepository.findByIdAndClubIdAndRoleForUpdate(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> adminService.resetPassword(CURRENT_USER, ADMIN_ID, request)).isInstanceOf(AdminNotFoundException.class);
 

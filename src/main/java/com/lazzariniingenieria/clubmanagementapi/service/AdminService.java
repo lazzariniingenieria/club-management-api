@@ -99,7 +99,7 @@ public class AdminService {
     @Transactional
     public AdminResponse deactivateAdmin(AuthenticatedUser currentUser, Long adminId) {
         Long clubId = currentUser.clubId();
-        UserAccount admin = findAdminOrThrow(clubId, adminId);
+        UserAccount admin = findAdminForUpdateOrThrow(clubId, adminId);
         admin.setActive(false);
         admin.setSessionsRevokedAt(Instant.now());
         markUpdated(admin, currentUser.userAccountId());
@@ -126,7 +126,7 @@ public class AdminService {
     @Transactional
     public AdminResponse resetPassword(AuthenticatedUser currentUser, Long adminId, ResetAdminPasswordRequest request) {
         Long clubId = currentUser.clubId();
-        UserAccount admin = findAdminOrThrow(clubId, adminId);
+        UserAccount admin = findAdminForUpdateOrThrow(clubId, adminId);
         admin.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         admin.setSessionsRevokedAt(Instant.now());
         markUpdated(admin, currentUser.userAccountId());
@@ -158,6 +158,12 @@ public class AdminService {
     private UserAccount findAdminOrThrow(Long clubId, Long adminId) {
         return userAccountRepository
                 .findByIdAndClubIdAndRole(adminId, clubId, UserRole.ADMIN)
+                .orElseThrow(() -> new AdminNotFoundException(adminId));
+    }
+
+    private UserAccount findAdminForUpdateOrThrow(Long clubId, Long adminId) {
+        return userAccountRepository
+                .findByIdAndClubIdAndRoleForUpdate(adminId, clubId, UserRole.ADMIN)
                 .orElseThrow(() -> new AdminNotFoundException(adminId));
     }
 }

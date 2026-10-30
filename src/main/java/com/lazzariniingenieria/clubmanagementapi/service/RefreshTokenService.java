@@ -51,25 +51,25 @@ public class RefreshTokenService {
         log.info("Revoked {} active refresh token(s) for userAccountId={}", revokedCount, userAccountId);
     }
 
-    @Transactional
-    public RefreshToken consumeToken(String rawToken) {
+    public RefreshToken findUsableToken(String rawToken) {
         RefreshToken refreshToken = refreshTokenRepository
                 .findByTokenHash(hash(rawToken))
                 .orElseThrow(InvalidRefreshTokenException::new);
         validateUsable(refreshToken);
-        rotateOrReject(refreshToken);
-        log.info("Rotated refresh token for userAccountId={}", refreshToken.getUserAccountId());
 
         return refreshToken;
     }
 
-    private void rotateOrReject(RefreshToken refreshToken) {
+    @Transactional
+    public void rotateOrReject(RefreshToken refreshToken) {
         int revokedCount = refreshTokenRepository.revokeIfActive(refreshToken.getId(), Instant.now());
 
         if (revokedCount == 0) {
             log.warn("Refresh token of userAccountId={} was revoked concurrently, rejecting refresh", refreshToken.getUserAccountId());
             throw new InvalidRefreshTokenException();
         }
+
+        log.info("Rotated refresh token for userAccountId={}", refreshToken.getUserAccountId());
     }
 
     private void validateUsable(RefreshToken refreshToken) {

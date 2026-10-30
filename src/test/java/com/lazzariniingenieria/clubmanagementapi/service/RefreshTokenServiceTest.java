@@ -72,20 +72,18 @@ class RefreshTokenServiceTest {
         String storedHash = savedTokenCaptor.getValue().getTokenHash();
         RefreshToken storedRefreshToken = validRefreshToken(storedHash);
         when(refreshTokenRepository.findByTokenHash(storedHash)).thenReturn(Optional.of(storedRefreshToken));
-        when(refreshTokenRepository.revokeIfActive(eq(TOKEN_ID), any(Instant.class))).thenReturn(1);
 
-        RefreshToken consumedToken = refreshTokenService.consumeToken(rawToken);
+        RefreshToken foundToken = refreshTokenService.findUsableToken(rawToken);
 
-        assertThat(consumedToken).isSameAs(storedRefreshToken);
+        assertThat(foundToken).isSameAs(storedRefreshToken);
     }
 
     @Test
     void shouldRotateTokenWithAConditionalRevocation() {
         RefreshToken activeToken = validRefreshToken("hash");
-        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(activeToken));
         when(refreshTokenRepository.revokeIfActive(eq(TOKEN_ID), any(Instant.class))).thenReturn(1);
 
-        refreshTokenService.consumeToken("some-token");
+        refreshTokenService.rotateOrReject(activeToken);
 
         verify(refreshTokenRepository).revokeIfActive(eq(TOKEN_ID), any(Instant.class));
         verify(refreshTokenRepository, never()).save(any());
@@ -94,18 +92,16 @@ class RefreshTokenServiceTest {
     @Test
     void shouldRejectRefreshWhenTheTokenWasRevokedConcurrently() {
         RefreshToken activeToken = validRefreshToken("hash");
-        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(activeToken));
         when(refreshTokenRepository.revokeIfActive(eq(TOKEN_ID), any(Instant.class))).thenReturn(0);
 
-        assertThatThrownBy(() -> refreshTokenService.consumeToken("some-token")).isInstanceOf(InvalidRefreshTokenException.class);
+        assertThatThrownBy(() -> refreshTokenService.rotateOrReject(activeToken)).isInstanceOf(InvalidRefreshTokenException.class);
     }
 
     @Test
     void shouldThrowInvalidRefreshTokenWhenTokenDoesNotExist() {
         when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> refreshTokenService.consumeToken("unknown-token"))
-                .isInstanceOf(InvalidRefreshTokenException.class);
+        assertThatThrownBy(() -> refreshTokenService.findUsableToken("unknown-token")).isInstanceOf(InvalidRefreshTokenException.class);
     }
 
     @Test
@@ -114,8 +110,7 @@ class RefreshTokenServiceTest {
         revokedToken.setRevokedAt(Instant.now().minusSeconds(60));
         when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(revokedToken));
 
-        assertThatThrownBy(() -> refreshTokenService.consumeToken("some-token"))
-                .isInstanceOf(InvalidRefreshTokenException.class);
+        assertThatThrownBy(() -> refreshTokenService.findUsableToken("some-token")).isInstanceOf(InvalidRefreshTokenException.class);
     }
 
     @Test
@@ -124,8 +119,7 @@ class RefreshTokenServiceTest {
         expiredToken.setExpiresAt(Instant.now().minusSeconds(60));
         when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(expiredToken));
 
-        assertThatThrownBy(() -> refreshTokenService.consumeToken("some-token"))
-                .isInstanceOf(InvalidRefreshTokenException.class);
+        assertThatThrownBy(() -> refreshTokenService.findUsableToken("some-token")).isInstanceOf(InvalidRefreshTokenException.class);
     }
 
     @Test
