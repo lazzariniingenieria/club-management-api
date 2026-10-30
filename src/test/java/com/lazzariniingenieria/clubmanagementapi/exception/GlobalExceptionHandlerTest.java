@@ -177,14 +177,14 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void shouldReturnBadRequestWithExceptionMessageWhenPeriodsCoveredAreDuplicated() {
-        DuplicatePeriodCoveredException exception = new DuplicatePeriodCoveredException();
+        DuplicatePeriodCoveredException exception = new DuplicatePeriodCoveredException(7L);
 
         ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleDuplicatePeriodCovered(exception);
         ApiErrorDto body = response.getBody();
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(body.status()).isEqualTo(400);
-        assertThat(body.message()).isEqualTo("periodsCovered must not contain duplicate dates");
+        assertThat(body.message()).isEqualTo("periodsCovered of memberId 7 must not contain duplicate dates");
         assertThat(body.details()).isEmpty();
     }
 
@@ -197,6 +197,18 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(body.message()).isEqualTo("Payment 42 not found");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnConflictWithExceptionMessageWhenAMemberAlreadyBelongsToAFamilyGroup() {
+        MemberAlreadyInFamilyGroupException exception = new MemberAlreadyInFamilyGroupException(List.of(10L, 11L));
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleMemberAlreadyInFamilyGroup(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.message()).isEqualTo("Member(s) [10, 11] already belong to a family group");
         assertThat(body.details()).isEmpty();
     }
 

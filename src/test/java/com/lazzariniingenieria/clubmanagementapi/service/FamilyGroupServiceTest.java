@@ -3,26 +3,36 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateFamilyGroupRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.FamilyGroupResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateFamilyGroupRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.FamilyGroup;
+import com.lazzariniingenieria.clubmanagementapi.entity.Member;
+import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberAlreadyInFamilyGroupException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.FamilyGroupMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.FamilyGroupMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.FamilyGroupRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -39,18 +49,21 @@ class FamilyGroupServiceTest {
     @Mock
     private FamilyGroupRepository familyGroupRepository;
 
+    @Mock
+    private MemberRepository memberRepository;
+
     private final FamilyGroupMapper familyGroupMapper = new FamilyGroupMapperImpl();
 
     private FamilyGroupService familyGroupService;
 
     @BeforeEach
     void setUp() {
-        familyGroupService = new FamilyGroupService(familyGroupRepository, familyGroupMapper);
+        familyGroupService = new FamilyGroupService(familyGroupRepository, familyGroupMapper, memberRepository);
     }
 
     @Test
     void shouldCreateFamilyGroup() {
-        CreateFamilyGroupRequest request = new CreateFamilyGroupRequest("Familia Gomez");
+        CreateFamilyGroupRequest request = new CreateFamilyGroupRequest("Familia Gomez", null);
         when(familyGroupRepository.save(any(FamilyGroup.class))).thenReturn(familyGroup());
 
         FamilyGroupResponse response = familyGroupService.createFamilyGroup(CURRENT_USER, request);
@@ -70,6 +83,68 @@ class FamilyGroupServiceTest {
         assertThat(response.createdByUserId()).isEqualTo(ACTING_USER_ID);
         assertThat(response.updatedByUserId()).isEqualTo(ACTING_USER_ID);
         assertThat(response.updatedAt()).isEqualTo(CREATED_AT);
+    }
+
+    @Test
+    void shouldNotLookUpOrLockMembersWhenCreatingAGroupWithoutMembers() {
+        when(familyGroupRepository.save(any(FamilyGroup.class))).thenReturn(familyGroup());
+
+        familyGroupService.createFamilyGroup(CURRENT_USER, new CreateFamilyGroupRequest("Familia Gomez", List.of()));
+
+        verify(memberRepository, never()).findByClubIdAndIdInForUpdate(any(), any());
+    }
+
+    @Test
+    void shouldAssignEveryRequestedMemberToTheNewGroupInTheSameOperation() {
+        List<Member> members = List.of(member(10L, null), member(11L, null));
+        when(memberRepository.findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L, 11L))).thenReturn(members);
+        when(familyGroupRepository.save(any(FamilyGroup.class))).thenReturn(familyGroup());
+
+        familyGroupService.createFamilyGroup(CURRENT_USER, new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 11L)));
+
+        assertThat(members).allSatisfy(member -> {
+            assertThat(member.getFamilyGroupId()).isEqualTo(FAMILY_GROUP_ID);
+            assertThat(member.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+            assertThat(member.getUpdatedAt()).isNotEqualTo(CREATED_AT);
+        });
+        verify(memberRepository).saveAll(members);
+    }
+
+    @Test
+    void shouldLookUpEachMemberOnceWhenTheRequestRepeatsAMemberId() {
+        when(memberRepository.findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L))).thenReturn(List.of(member(10L, null)));
+        when(familyGroupRepository.save(any(FamilyGroup.class))).thenReturn(familyGroup());
+
+        familyGroupService.createFamilyGroup(CURRENT_USER, new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 10L)));
+
+        verify(memberRepository).findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L));
+    }
+
+    @Test
+    void shouldRejectGroupCreationWithoutSavingAnythingWhenAMemberIsNotInTheClub() {
+        when(memberRepository.findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L, 11L))).thenReturn(List.of(member(10L, null)));
+        CreateFamilyGroupRequest request = new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 11L));
+
+        assertThatThrownBy(() -> familyGroupService.createFamilyGroup(CURRENT_USER, request))
+                .isInstanceOf(MemberNotFoundException.class)
+                .hasMessage("Member 11 not found");
+
+        verify(familyGroupRepository, never()).save(any());
+        verify(memberRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void shouldRejectGroupCreationWithoutSavingAnythingWhenAMemberAlreadyBelongsToAGroup() {
+        List<Member> members = List.of(member(10L, null), member(11L, 7L));
+        when(memberRepository.findByClubIdAndIdInForUpdate(CLUB_ID, Set.of(10L, 11L))).thenReturn(members);
+        CreateFamilyGroupRequest request = new CreateFamilyGroupRequest("Familia Gomez", List.of(10L, 11L));
+
+        assertThatThrownBy(() -> familyGroupService.createFamilyGroup(CURRENT_USER, request))
+                .isInstanceOf(MemberAlreadyInFamilyGroupException.class)
+                .hasMessage("Member(s) [11] already belong to a family group");
+
+        verify(familyGroupRepository, never()).save(any());
+        verify(memberRepository, never()).saveAll(any());
     }
 
     @Test
@@ -123,6 +198,58 @@ class FamilyGroupServiceTest {
                 .isInstanceOf(FamilyGroupNotFoundException.class);
     }
 
+    @Test
+    void shouldUnassignEveryMemberOfTheGroupAndRecordWhoDidIt() {
+        Member firstMember = member(10L, FAMILY_GROUP_ID);
+        Member secondMember = member(11L, FAMILY_GROUP_ID);
+        when(familyGroupRepository.findByIdAndClubId(FAMILY_GROUP_ID, CLUB_ID)).thenReturn(Optional.of(familyGroup()));
+        when(memberRepository.findByClubIdAndFamilyGroupId(CLUB_ID, FAMILY_GROUP_ID)).thenReturn(List.of(firstMember, secondMember));
+
+        familyGroupService.deleteFamilyGroup(CURRENT_USER, FAMILY_GROUP_ID);
+
+        assertThat(List.of(firstMember, secondMember)).allSatisfy(member -> {
+            assertThat(member.getFamilyGroupId()).isNull();
+            assertThat(member.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+            assertThat(member.getUpdatedAt()).isNotEqualTo(CREATED_AT);
+        });
+    }
+
+    @Test
+    void shouldFlushTheUnassignedMembersBeforeDeletingTheGroupSoTheForeignKeyNeverPointsToAMissingGroup() {
+        FamilyGroup existingFamilyGroup = familyGroup();
+        List<Member> members = List.of(member(10L, FAMILY_GROUP_ID));
+        when(familyGroupRepository.findByIdAndClubId(FAMILY_GROUP_ID, CLUB_ID)).thenReturn(Optional.of(existingFamilyGroup));
+        when(memberRepository.findByClubIdAndFamilyGroupId(CLUB_ID, FAMILY_GROUP_ID)).thenReturn(members);
+
+        familyGroupService.deleteFamilyGroup(CURRENT_USER, FAMILY_GROUP_ID);
+
+        InOrder deletionOrder = inOrder(memberRepository, familyGroupRepository);
+        deletionOrder.verify(memberRepository).saveAllAndFlush(members);
+        deletionOrder.verify(familyGroupRepository).delete(existingFamilyGroup);
+    }
+
+    @Test
+    void shouldDeleteFamilyGroupThatHasNoMembers() {
+        FamilyGroup existingFamilyGroup = familyGroup();
+        when(familyGroupRepository.findByIdAndClubId(FAMILY_GROUP_ID, CLUB_ID)).thenReturn(Optional.of(existingFamilyGroup));
+        when(memberRepository.findByClubIdAndFamilyGroupId(CLUB_ID, FAMILY_GROUP_ID)).thenReturn(List.of());
+
+        familyGroupService.deleteFamilyGroup(CURRENT_USER, FAMILY_GROUP_ID);
+
+        verify(familyGroupRepository).delete(existingFamilyGroup);
+    }
+
+    @Test
+    void shouldThrowFamilyGroupNotFoundWithoutTouchingMembersWhenDeletingMissingFamilyGroup() {
+        when(familyGroupRepository.findByIdAndClubId(FAMILY_GROUP_ID, CLUB_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> familyGroupService.deleteFamilyGroup(CURRENT_USER, FAMILY_GROUP_ID))
+                .isInstanceOf(FamilyGroupNotFoundException.class);
+
+        verifyNoInteractions(memberRepository);
+        verify(familyGroupRepository, never()).delete(any());
+    }
+
     private FamilyGroup familyGroup() {
         return familyGroup(ACTING_USER_ID);
     }
@@ -136,6 +263,22 @@ class FamilyGroupServiceTest {
                 .updatedAt(CREATED_AT)
                 .createdByUserId(actorId)
                 .updatedByUserId(actorId)
+                .build();
+    }
+
+    private Member member(Long memberId, Long familyGroupId) {
+        return Member.builder()
+                .id(memberId)
+                .clubId(CLUB_ID)
+                .familyGroupId(familyGroupId)
+                .firstName("Marcos")
+                .lastName("Gomez")
+                .dni("30111" + memberId)
+                .status(MemberStatus.ACTIVE)
+                .createdAt(CREATED_AT)
+                .updatedAt(CREATED_AT)
+                .createdByUserId(PREVIOUS_ACTOR_ID)
+                .updatedByUserId(PREVIOUS_ACTOR_ID)
                 .build();
     }
 }

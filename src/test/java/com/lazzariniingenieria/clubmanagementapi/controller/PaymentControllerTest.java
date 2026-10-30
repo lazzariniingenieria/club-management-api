@@ -1,6 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -19,6 +20,7 @@ import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentBatchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.VoidPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.PaymentMethod;
@@ -32,6 +34,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.PaymentNotFoundExcept
 import com.lazzariniingenieria.clubmanagementapi.exception.PeriodAlreadyPaidException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.PaymentService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -69,6 +72,9 @@ class PaymentControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnCreatedPaymentsWhenRequesterIsAdmin() throws Exception {
@@ -119,6 +125,89 @@ class PaymentControllerTest {
     }
 
     @Test
+    void shouldReturnEveryCreatedPaymentWhenRecordingABatch() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-valid.json");
+        when(paymentService.recordPaymentBatch(any(AuthenticatedUser.class), any(RecordPaymentBatchRequest.class)))
+                .thenReturn(List.of(paymentResponse(), paymentResponse()));
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()", is(2)));
+
+        ArgumentCaptor<RecordPaymentBatchRequest> requestCaptor = ArgumentCaptor.forClass(RecordPaymentBatchRequest.class);
+        verify(paymentService).recordPaymentBatch(any(AuthenticatedUser.class), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().payments()).extracting(RecordPaymentRequest::memberId).containsExactly(1L, 2L);
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenBatchHasNoPayments() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-empty.json");
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+
+        verify(paymentService, never()).recordPaymentBatch(any(), any());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenABatchEntryIsNull() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-null-entry.json");
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem("payments[0]: payments must not contain null entries")));
+
+        verify(paymentService, never()).recordPaymentBatch(any(), any());
+    }
+
+    @Test
+    void shouldReturnBadRequestNamingTheEntryWhenABatchEntryIsInvalid() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-invalid-entry.json");
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]", is("payments[1].amount: amount must be greater than zero")));
+
+        verify(paymentService, never()).recordPaymentBatch(any(), any());
+    }
+
+    @Test
+    void shouldReturnConflictWhenABatchEntryHasAPeriodAlreadyPaid() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-valid.json");
+        when(paymentService.recordPaymentBatch(any(AuthenticatedUser.class), any(RecordPaymentBatchRequest.class)))
+                .thenThrow(new PeriodAlreadyPaidException(2L, List.of(LocalDate.parse("2026-07-01"))));
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenMemberRecordsABatch() throws Exception {
+        String requestBody = readFixture("record-payment-batch-request-valid.json");
+
+        mockMvc.perform(post("/api/payments/batch")
+                        .with(asMember())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void shouldReturnPaymentHistoryWhenRequesterIsSuperAdmin() throws Exception {
         when(paymentService.listPaymentsForMember(CLUB_ID, MEMBER_ID, false)).thenReturn(List.of(paymentResponse()));
 
@@ -164,7 +253,7 @@ class PaymentControllerTest {
     void shouldReturnBadRequestWhenPeriodsCoveredContainDuplicates() throws Exception {
         String requestBody = readFixture("record-payment-request-valid.json");
         when(paymentService.recordPayment(any(AuthenticatedUser.class), any(RecordPaymentRequest.class)))
-                .thenThrow(new DuplicatePeriodCoveredException());
+                .thenThrow(new DuplicatePeriodCoveredException(MEMBER_ID));
 
         mockMvc.perform(post("/api/payments")
                         .with(asAdmin())

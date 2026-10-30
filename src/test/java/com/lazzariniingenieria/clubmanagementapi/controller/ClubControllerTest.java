@@ -20,6 +20,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.ClubNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.ClubService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -53,6 +54,9 @@ class ClubControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnClubOfTheTokenWhenRequesterIsAdmin() throws Exception {
@@ -125,16 +129,17 @@ class ClubControllerTest {
     }
 
     @Test
-    void shouldReturnForbiddenWhenAdminUpdatesMonthlyFee() throws Exception {
+    void shouldUpdateMonthlyFeeWhenRequesterIsAdmin() throws Exception {
         String requestBody = readFixture("update-club-monthly-fee-request-valid.json");
+        when(clubService.updateMonthlyFee(any(AuthenticatedUser.class), any(UpdateClubMonthlyFeeRequest.class)))
+                .thenReturn(clubResponse(new BigDecimal("15000.00")));
 
         mockMvc.perform(patch("/api/clubs/me")
                         .with(asAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isForbidden());
-
-        verify(clubService, never()).updateMonthlyFee(any(), any());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.monthlyFeeAmount", is(15000.00)));
     }
 
     @Test

@@ -1,8 +1,11 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -21,6 +24,7 @@ import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundExceptio
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
 import com.lazzariniingenieria.clubmanagementapi.service.AdminService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -54,6 +58,9 @@ class AdminControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private AccountSessionService accountSessionService;
 
     @Test
     void shouldReturnCreatedAdminWhenRequesterIsSuperAdmin() throws Exception {
@@ -104,6 +111,20 @@ class AdminControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnBadRequestInsteadOfFailingWhenPasswordExceedsTheBcryptByteLimit() throws Exception {
+        String requestBody = readFixture("create-admin-request-password-too-many-bytes.json");
+
+        mockMvc.perform(post("/api/admins")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem("password: password must be at most 72 bytes (accents count as 2)")));
+
+        verify(adminService, never()).createAdmin(any(), any());
     }
 
     @Test
@@ -238,6 +259,20 @@ class AdminControllerTest {
     }
 
     @Test
+    void shouldReturnBadRequestInsteadOfFailingWhenNewPasswordExceedsTheBcryptByteLimit() throws Exception {
+        String requestBody = readFixture("reset-admin-password-request-too-many-bytes.json");
+
+        mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem("newPassword: newPassword must be at most 72 bytes (accents count as 2)")));
+
+        verify(adminService, never()).resetPassword(any(), any(), any());
+    }
+
+    @Test
     void shouldReturnNotFoundWhenResettingPasswordOfMissingAdmin() throws Exception {
         String requestBody = readFixture("reset-admin-password-request-valid.json");
         when(adminService.resetPassword(any(AuthenticatedUser.class), eq(ADMIN_ID), any(ResetAdminPasswordRequest.class)))
@@ -251,16 +286,16 @@ class AdminControllerTest {
     }
 
     @Test
-    void shouldResetAdminPasswordWhenRequesterIsAdmin() throws Exception {
+    void shouldReturnForbiddenWhenAdminTriesToResetAnotherAdminsPassword() throws Exception {
         String requestBody = readFixture("reset-admin-password-request-valid.json");
-        when(adminService.resetPassword(any(AuthenticatedUser.class), eq(ADMIN_ID), any(ResetAdminPasswordRequest.class)))
-                .thenReturn(adminResponse());
 
         mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
                         .with(asAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
+
+        verify(adminService, never()).resetPassword(any(), any(), any());
     }
 
     @Test

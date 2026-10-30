@@ -3,6 +3,7 @@ package com.lazzariniingenieria.clubmanagementapi.controller;
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentBatchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.VoidPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
@@ -34,6 +35,14 @@ public class PaymentController {
     public ResponseEntity<List<PaymentResponse>> record(@AuthenticationPrincipal AuthenticatedUser currentUser,
                                                           @Valid @RequestBody RecordPaymentRequest request) {
         List<PaymentResponse> response = paymentService.recordPayment(currentUser, request);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/batch")
+    public ResponseEntity<List<PaymentResponse>> recordBatch(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                               @Valid @RequestBody RecordPaymentBatchRequest request) {
+        List<PaymentResponse> response = paymentService.recordPaymentBatch(currentUser, request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

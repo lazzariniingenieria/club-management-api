@@ -1,5 +1,6 @@
 package com.lazzariniingenieria.clubmanagementapi.service;
 
+import com.lazzariniingenieria.clubmanagementapi.dto.ChangeOwnPasswordRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.LoginResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RefreshRequest;
@@ -9,7 +10,9 @@ import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidCredentialsException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidRefreshTokenException;
 import com.lazzariniingenieria.clubmanagementapi.repository.UserAccountRepository;
+import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
+import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,8 +30,9 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
 
+    @Transactional
     public LoginResponse login(LoginRequest request) {
-        Optional<UserAccount> userAccount = userAccountRepository.findByClubIdAndDni(request.clubId(), request.dni());
+        Optional<UserAccount> userAccount = userAccountRepository.findByClubIdAndDniForUpdate(request.clubId(), request.dni());
 
         if (userAccount.isEmpty()) {
             throw loginRejected(request);
@@ -51,19 +55,38 @@ public class AuthService {
                 user.getRole(), user.getMemberId());
     }
 
+    // Every path that issues or cuts sessions locks the account row first, so a refresh racing a session cut is serialized
+    // with it instead of leaving behind tokens the cut never saw.
     @Transactional
     public RefreshResponse refresh(RefreshRequest request) {
-        RefreshToken consumedToken = refreshTokenService.consumeToken(request.refreshToken());
-        UserAccount user = userAccountRepository.findById(consumedToken.getUserAccountId())
+        RefreshToken refreshToken = refreshTokenService.findUsableToken(request.refreshToken());
+        UserAccount user = userAccountRepository.findByIdForUpdate(refreshToken.getUserAccountId())
                 .orElseThrow(InvalidRefreshTokenException::new);
 
         if (!user.isActive()) {
             throw new InvalidRefreshTokenException();
         }
 
+        refreshTokenService.rotateOrReject(refreshToken);
         TokenPair tokens = issueTokens(user);
 
         return new RefreshResponse(tokens.accessToken(), tokens.refreshToken(), tokens.expiresIn());
+    }
+
+    @Transactional
+    public void changeOwnPassword(AuthenticatedUser currentUser, ChangeOwnPasswordRequest request) {
+        Long userAccountId = currentUser.userAccountId();
+        Long clubId = currentUser.clubId();
+        UserAccount account = findAuthenticatedAccountOrThrow(userAccountId, clubId);
+        Instant now = Instant.now();
+        account.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        account.setSessionsRevokedAt(now);
+        account.setUpdatedAt(now);
+        account.setUpdatedByUserId(userAccountId);
+
+        userAccountRepository.save(account);
+        refreshTokenService.revokeActiveTokens(userAccountId);
+        log.info("userAccountId={} changed its own password in clubId={}", userAccountId, clubId);
     }
 
     private TokenPair issueTokens(UserAccount user) {
@@ -71,6 +94,14 @@ public class AuthService {
         String refreshToken = refreshTokenService.issueToken(user.getId());
 
         return new TokenPair(accessToken, refreshToken, jwtService.getExpirationSeconds());
+    }
+
+    private UserAccount findAuthenticatedAccountOrThrow(Long userAccountId, Long clubId) {
+        String missingAccountMessage = "Authenticated userAccountId=" + userAccountId + " has no account in clubId=" + clubId;
+
+        return userAccountRepository
+                .findByIdAndClubIdForUpdate(userAccountId, clubId)
+                .orElseThrow(() -> new IllegalStateException(missingAccountMessage));
     }
 
     private InvalidCredentialsException loginRejected(LoginRequest request) {

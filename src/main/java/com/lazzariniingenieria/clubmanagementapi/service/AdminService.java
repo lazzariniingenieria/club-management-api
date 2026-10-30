@@ -96,13 +96,16 @@ public class AdminService {
         return adminMapper.toResponse(savedAdmin);
     }
 
+    @Transactional
     public AdminResponse deactivateAdmin(AuthenticatedUser currentUser, Long adminId) {
         Long clubId = currentUser.clubId();
-        UserAccount admin = findAdminOrThrow(clubId, adminId);
+        UserAccount admin = findAdminForUpdateOrThrow(clubId, adminId);
         admin.setActive(false);
+        admin.setSessionsRevokedAt(Instant.now());
         markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
+        refreshTokenService.revokeActiveTokens(adminId);
         log.info("Deactivated admin userAccountId={} for clubId={}", adminId, clubId);
 
         return adminMapper.toResponse(savedAdmin);
@@ -123,8 +126,9 @@ public class AdminService {
     @Transactional
     public AdminResponse resetPassword(AuthenticatedUser currentUser, Long adminId, ResetAdminPasswordRequest request) {
         Long clubId = currentUser.clubId();
-        UserAccount admin = findAdminOrThrow(clubId, adminId);
+        UserAccount admin = findAdminForUpdateOrThrow(clubId, adminId);
         admin.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        admin.setSessionsRevokedAt(Instant.now());
         markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
@@ -154,6 +158,12 @@ public class AdminService {
     private UserAccount findAdminOrThrow(Long clubId, Long adminId) {
         return userAccountRepository
                 .findByIdAndClubIdAndRole(adminId, clubId, UserRole.ADMIN)
+                .orElseThrow(() -> new AdminNotFoundException(adminId));
+    }
+
+    private UserAccount findAdminForUpdateOrThrow(Long clubId, Long adminId) {
+        return userAccountRepository
+                .findByIdAndClubIdAndRoleForUpdate(adminId, clubId, UserRole.ADMIN)
                 .orElseThrow(() -> new AdminNotFoundException(adminId));
     }
 }
