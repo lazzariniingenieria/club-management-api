@@ -216,6 +216,18 @@ class AdminServiceTest {
     }
 
     @Test
+    void shouldRevokeSessionsWhenDeactivatingAnAdmin() {
+        Instant beforeDeactivation = Instant.now();
+        UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
+
+        adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID);
+
+        assertThat(existingAdmin.getSessionsRevokedAt()).isBetween(beforeDeactivation, Instant.now());
+    }
+
+    @Test
     void shouldThrowAdminNotFoundWhenDeactivatingMissingAdmin() {
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.empty());
 

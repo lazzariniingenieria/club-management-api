@@ -28,15 +28,15 @@ public class AccountSessionService {
         return !issuedBeforeSessionsWereRevoked(accessToken.issuedAt(), account.get().getSessionsRevokedAt());
     }
 
-    // The JWT "iat" claim only keeps whole seconds, so the revocation instant is truncated the same way; otherwise a token
-    // issued a few milliseconds after the revocation, within the same second, would be rejected as if it were older.
+    // The JWT "iat" claim only keeps whole seconds, so a token issued within the same second as the revocation can't be told
+    // apart from one issued just before it. Every token of that second is rejected; the client recovers with a refresh.
     private boolean issuedBeforeSessionsWereRevoked(Instant issuedAt, Instant sessionsRevokedAt) {
         if (sessionsRevokedAt == null) {
             return false;
         }
 
-        Instant sessionsRevokedAtSecond = sessionsRevokedAt.truncatedTo(ChronoUnit.SECONDS);
+        Instant firstSecondAfterRevocation = sessionsRevokedAt.truncatedTo(ChronoUnit.SECONDS).plusSeconds(1);
 
-        return issuedAt.isBefore(sessionsRevokedAtSecond);
+        return issuedAt.isBefore(firstSecondAfterRevocation);
     }
 }

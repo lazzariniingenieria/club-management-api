@@ -50,7 +50,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         boolean sessionValid = accountSessionService.isSessionValid(accessToken);
 
         if (!sessionValid) {
-            log.info("Rejected access token of userAccountId={} in clubId={}: account deactivated or password changed",
+            log.info("Rejected access token of userAccountId={} in clubId={}: account deactivated or sessions revoked",
                     authenticatedUser.userAccountId(), authenticatedUser.clubId());
 
             return;

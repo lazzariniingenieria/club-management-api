@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class RefreshTokenServiceTest {
 
     private static final Long USER_ACCOUNT_ID = 1L;
+    private static final Long TOKEN_ID = 5L;
     private static final long EXPIRATION_MS = 2_592_000_000L;
 
     @Mock
@@ -70,10 +72,32 @@ class RefreshTokenServiceTest {
         String storedHash = savedTokenCaptor.getValue().getTokenHash();
         RefreshToken storedRefreshToken = validRefreshToken(storedHash);
         when(refreshTokenRepository.findByTokenHash(storedHash)).thenReturn(Optional.of(storedRefreshToken));
+        when(refreshTokenRepository.revokeIfActive(eq(TOKEN_ID), any(Instant.class))).thenReturn(1);
 
-        refreshTokenService.consumeToken(rawToken);
+        RefreshToken consumedToken = refreshTokenService.consumeToken(rawToken);
 
-        assertThat(storedRefreshToken.getRevokedAt()).isNotNull();
+        assertThat(consumedToken).isSameAs(storedRefreshToken);
+    }
+
+    @Test
+    void shouldRotateTokenWithAConditionalRevocation() {
+        RefreshToken activeToken = validRefreshToken("hash");
+        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(activeToken));
+        when(refreshTokenRepository.revokeIfActive(eq(TOKEN_ID), any(Instant.class))).thenReturn(1);
+
+        refreshTokenService.consumeToken("some-token");
+
+        verify(refreshTokenRepository).revokeIfActive(eq(TOKEN_ID), any(Instant.class));
+        verify(refreshTokenRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldRejectRefreshWhenTheTokenWasRevokedConcurrently() {
+        RefreshToken activeToken = validRefreshToken("hash");
+        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(activeToken));
+        when(refreshTokenRepository.revokeIfActive(eq(TOKEN_ID), any(Instant.class))).thenReturn(0);
+
+        assertThatThrownBy(() -> refreshTokenService.consumeToken("some-token")).isInstanceOf(InvalidRefreshTokenException.class);
     }
 
     @Test
@@ -115,7 +139,7 @@ class RefreshTokenServiceTest {
 
     private RefreshToken validRefreshToken(String tokenHash) {
         return RefreshToken.builder()
-                .id(1L)
+                .id(TOKEN_ID)
                 .userAccountId(USER_ACCOUNT_ID)
                 .tokenHash(tokenHash)
                 .expiresAt(Instant.now().plusSeconds(60))

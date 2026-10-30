@@ -12,6 +12,7 @@ import java.util.Base64;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
@@ -50,13 +51,13 @@ public class RefreshTokenService {
         log.info("Revoked {} active refresh token(s) for userAccountId={}", revokedCount, userAccountId);
     }
 
+    @Transactional
     public RefreshToken consumeToken(String rawToken) {
         RefreshToken refreshToken = refreshTokenRepository
                 .findByTokenHash(hash(rawToken))
                 .orElseThrow(InvalidRefreshTokenException::new);
         validateUsable(refreshToken);
-        refreshToken.setRevokedAt(Instant.now());
-        refreshTokenRepository.save(refreshToken);
+        rotateOrReject(refreshToken);
         log.info("Rotated refresh token for userAccountId={}", refreshToken.getUserAccountId());
 
         return refreshToken;

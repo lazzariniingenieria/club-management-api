@@ -71,8 +71,15 @@ class AccountSessionServiceTest {
     }
 
     @Test
-    void shouldAcceptTokenIssuedWithinTheSameSecondAsTheSessionsRevocationBecauseIssuedAtHasNoMilliseconds() {
+    void shouldRejectTokenIssuedWithinTheSameSecondAsTheSessionsRevocationBecauseIssuedAtHasNoMilliseconds() {
         stubAccount(account(true, Instant.parse("2026-10-24T12:00:00.750Z")));
+
+        assertThat(accountSessionService.isSessionValid(ACCESS_TOKEN)).isFalse();
+    }
+
+    @Test
+    void shouldAcceptTokenIssuedInTheSecondRightAfterTheSessionsRevocation() {
+        stubAccount(account(true, Instant.parse("2026-10-24T11:59:59.500Z")));
 
         assertThat(accountSessionService.isSessionValid(ACCESS_TOKEN)).isTrue();
     }
