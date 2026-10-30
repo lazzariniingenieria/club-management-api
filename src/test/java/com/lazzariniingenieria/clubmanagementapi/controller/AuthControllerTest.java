@@ -1,5 +1,6 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -189,6 +190,21 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
+
+        verify(authService, never()).changeOwnPassword(any(), any());
+    }
+
+    @Test
+    void shouldReturnBadRequestInsteadOfFailingWhenOwnNewPasswordExceedsTheBcryptByteLimit() throws Exception {
+        String requestBody = readFixture("change-own-password-request-too-many-bytes.json");
+        AuthenticatedUser admin = new AuthenticatedUser(2L, CLUB_ID, UserRole.ADMIN, 7L);
+
+        mockMvc.perform(patch("/api/auth/me/password")
+                        .with(authenticatedAs(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem("newPassword: newPassword must be at most 72 bytes (accents count as 2)")));
 
         verify(authService, never()).changeOwnPassword(any(), any());
     }

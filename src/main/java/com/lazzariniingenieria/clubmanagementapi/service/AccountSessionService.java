@@ -29,7 +29,8 @@ public class AccountSessionService {
     }
 
     // The JWT "iat" claim only keeps whole seconds, so a token issued within the same second as the revocation can't be told
-    // apart from one issued just before it. Every token of that second is rejected; the client recovers with a refresh.
+    // apart from one issued just before it. Every token of that second is rejected, even one issued right after the revocation;
+    // a refresh made once that second has passed issues a token that is accepted.
     private boolean issuedBeforeSessionsWereRevoked(Instant issuedAt, Instant sessionsRevokedAt) {
         if (sessionsRevokedAt == null) {
             return false;

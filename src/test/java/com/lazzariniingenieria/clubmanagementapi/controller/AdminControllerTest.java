@@ -1,5 +1,6 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -110,6 +111,20 @@ class AdminControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnBadRequestInsteadOfFailingWhenPasswordExceedsTheBcryptByteLimit() throws Exception {
+        String requestBody = readFixture("create-admin-request-password-too-many-bytes.json");
+
+        mockMvc.perform(post("/api/admins")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem("password: password must be at most 72 bytes (accents count as 2)")));
+
+        verify(adminService, never()).createAdmin(any(), any());
     }
 
     @Test
@@ -241,6 +256,20 @@ class AdminControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnBadRequestInsteadOfFailingWhenNewPasswordExceedsTheBcryptByteLimit() throws Exception {
+        String requestBody = readFixture("reset-admin-password-request-too-many-bytes.json");
+
+        mockMvc.perform(patch("/api/admins/{adminId}/password", ADMIN_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem("newPassword: newPassword must be at most 72 bytes (accents count as 2)")));
+
+        verify(adminService, never()).resetPassword(any(), any(), any());
     }
 
     @Test
