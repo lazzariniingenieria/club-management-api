@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.ApiErrorDto;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -246,6 +247,40 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(body.message()).isEqualTo("Club 1 not found");
+    }
+
+    @Test
+    void shouldReturnNotFoundWithExceptionMessageWhenCourtDoesNotExist() {
+        CourtNotFoundException exception = new CourtNotFoundException(42L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleCourtNotFound(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body.message()).isEqualTo("Court 42 not found");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnConflictWithExceptionMessageWhenCourtNameIsDuplicated() {
+        DuplicateCourtNameException exception = new DuplicateCourtNameException("Cancha 1");
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleDuplicateCourtName(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.message()).isEqualTo("court name Cancha 1 is already in use in this club");
+    }
+
+    @Test
+    void shouldReturnBadRequestWithExceptionMessageWhenCourtHoursAreInverted() {
+        InvalidCourtHoursException exception = new InvalidCourtHoursException(LocalTime.of(23, 0), LocalTime.of(8, 0));
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleInvalidCourtHours(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(body.message()).isEqualTo("closingTime 08:00 must be after openingTime 23:00");
     }
 
     @Test
