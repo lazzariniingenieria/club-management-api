@@ -1,6 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -31,8 +32,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @WebMvcTest(MemberController.class)
-@Import({SecurityConfig.class, HttpCachingConfig.class})
-class HttpCachingConfigTest {
+@Import(SecurityConfig.class)
+class ResponseEtagTest {
 
     private static final Long CLUB_ID = 1L;
     private static final String MEMBERS_PATH = "/api/members";
@@ -84,11 +85,12 @@ class HttpCachingConfigTest {
     }
 
     @Test
-    void shouldAskClientsToRevalidatePrivatelyInsteadOfForbiddingStorage() throws Exception {
+    void shouldKeepTheSecurityCacheControlThatForbidsStoringTheResponse() throws Exception {
         when(memberService.listMembers(CLUB_ID)).thenReturn(List.of(memberResponse("Marcos")));
 
         mockMvc.perform(get(MEMBERS_PATH).with(asAdmin()))
-                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-cache"));
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
+                .andExpect(header().exists(HttpHeaders.ETAG));
     }
 
     @Test
