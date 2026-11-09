@@ -16,6 +16,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +25,7 @@ public class CourtService {
 
     private final CourtRepository courtRepository;
     private final CourtMapper courtMapper;
+    private final ReservationService reservationService;
 
     public CourtResponse createCourt(AuthenticatedUser currentUser, CreateCourtRequest request) {
         Long clubId = currentUser.clubId();
@@ -75,9 +77,12 @@ public class CourtService {
         return courtMapper.toResponse(savedCourt);
     }
 
+    @Transactional
     public CourtResponse deactivateCourt(AuthenticatedUser currentUser, Long courtId) {
         Court savedCourt = saveActive(currentUser, courtId, false);
-        log.info("Deactivated court courtId={} for clubId={}", courtId, currentUser.clubId());
+        int cancelledReservations = reservationService.cancelUpcomingReservations(currentUser, courtId);
+        log.info("Deactivated court courtId={} for clubId={}, cancelling {} upcoming reservation(s)", courtId, currentUser.clubId(),
+                cancelledReservations);
 
         return courtMapper.toResponse(savedCourt);
     }

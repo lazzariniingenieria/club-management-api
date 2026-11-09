@@ -3,6 +3,7 @@ package com.lazzariniingenieria.clubmanagementapi.controller;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateReservationRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationSearchRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.UpcomingReservationsRequest;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.service.ReservationService;
 import jakarta.validation.Valid;
@@ -39,6 +40,14 @@ public class ReservationController {
     public ResponseEntity<List<ReservationResponse>> list(@AuthenticationPrincipal AuthenticatedUser currentUser,
                                                           @Valid @ModelAttribute ReservationSearchRequest filter) {
         List<ReservationResponse> response = reservationService.listReservations(currentUser.clubId(), filter);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/upcoming")
+    public ResponseEntity<List<ReservationResponse>> listUpcoming(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                                  @Valid @ModelAttribute UpcomingReservationsRequest filter) {
+        List<ReservationResponse> response = reservationService.listUpcomingReservations(currentUser.clubId(), filter.courtId());
 
         return ResponseEntity.ok(response);
     }

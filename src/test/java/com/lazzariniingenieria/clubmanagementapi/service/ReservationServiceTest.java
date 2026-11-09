@@ -284,6 +284,51 @@ class ReservationServiceTest {
     }
 
     @Test
+    void shouldListOnlyTheReservationsThatStartAfterNowInTheClub() {
+        Reservation tomorrowMorning = reservation("08:00", "09:00");
+        tomorrowMorning.setDate(TODAY.plusDays(1));
+        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        stubFromToday(List.of(reservation("18:00", "19:00"), reservation("21:00", "22:00"), tomorrowMorning));
+
+        List<ReservationResponse> response = reservationService.listUpcomingReservations(CLUB_ID, COURT_ID);
+
+        assertThat(response).extracting(ReservationResponse::startTime).containsExactly(LocalTime.of(21, 0), LocalTime.of(8, 0));
+    }
+
+    @Test
+    void shouldThrowCourtNotFoundWhenListingUpcomingReservationsOfAnotherClub() {
+        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> reservationService.listUpcomingReservations(CLUB_ID, COURT_ID))
+                .isInstanceOf(CourtNotFoundException.class);
+    }
+
+    @Test
+    void shouldCancelOnlyTheUpcomingReservationsOfTheCourt() {
+        Reservation earlierToday = reservation("18:00", "19:00");
+        Reservation laterToday = reservation("21:00", "22:00");
+        stubFromToday(List.of(earlierToday, laterToday));
+
+        int cancelled = reservationService.cancelUpcomingReservations(CURRENT_USER, COURT_ID);
+
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(earlierToday.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(laterToday.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(laterToday.getCancelledAt()).isEqualTo(NOW);
+        assertThat(laterToday.getCancelledByUserId()).isEqualTo(ACTING_USER_ID);
+        verify(reservationRepository).saveAll(List.of(laterToday));
+    }
+
+    @Test
+    void shouldCancelNothingWhenTheCourtHasNoUpcomingReservations() {
+        stubFromToday(List.of());
+
+        int cancelled = reservationService.cancelUpcomingReservations(CURRENT_USER, COURT_ID);
+
+        assertThat(cancelled).isZero();
+    }
+
+    @Test
     void shouldCancelRecordingWhoAndWhen() {
         Reservation existing = withId(reservation("21:00", "22:00"));
         when(reservationRepository.findById(RESERVATION_ID)).thenReturn(Optional.of(existing));
@@ -326,6 +371,11 @@ class ReservationServiceTest {
 
         assertThatThrownBy(() -> reservationService.cancelReservation(CURRENT_USER, RESERVATION_ID))
                 .isInstanceOf(ReservationNotFoundException.class);
+    }
+
+    private void stubFromToday(List<Reservation> reservations) {
+        when(reservationRepository.findByCourtIdAndStatusAndDateGreaterThanEqualOrderByDateAscStartTimeAsc(COURT_ID,
+                ReservationStatus.CONFIRMED, TODAY)).thenReturn(reservations);
     }
 
     private void stubClubCourtAndMember() {

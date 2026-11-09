@@ -76,6 +76,30 @@ public class ReservationService {
         return reservationMapper.toResponseList(reservations);
     }
 
+    public List<ReservationResponse> listUpcomingReservations(Long clubId, Long courtId) {
+        validateCourtExists(clubId, courtId);
+        List<Reservation> upcoming = upcomingReservationsOf(courtId);
+
+        return reservationMapper.toResponseList(upcoming);
+    }
+
+    public int cancelUpcomingReservations(AuthenticatedUser currentUser, Long courtId) {
+        List<Reservation> upcoming = upcomingReservationsOf(courtId);
+        Instant now = Instant.now(clubClock);
+
+        for (Reservation reservation : upcoming) {
+            reservation.setStatus(ReservationStatus.CANCELLED);
+            reservation.setCancelledAt(now);
+            reservation.setCancelledByUserId(currentUser.userAccountId());
+        }
+
+        reservationRepository.saveAll(upcoming);
+        log.info("Cancelled {} upcoming reservation(s) of courtId={} in clubId={} by userAccountId={}", upcoming.size(), courtId,
+                currentUser.clubId(), currentUser.userAccountId());
+
+        return upcoming.size();
+    }
+
     public ReservationResponse cancelReservation(AuthenticatedUser currentUser, Long reservationId) {
         Reservation reservation = findReservationOrThrow(currentUser.clubId(), reservationId);
         boolean alreadyCancelled = reservation.getStatus() == ReservationStatus.CANCELLED;
@@ -156,6 +180,23 @@ public class ReservationService {
                 throw new ReservationSlotTakenException("court " + courtId + " is already reserved at that time");
             }
         }
+    }
+
+    private List<Reservation> upcomingReservationsOf(Long courtId) {
+        LocalDateTime now = LocalDateTime.now(clubClock);
+        List<Reservation> fromToday = reservationRepository.findByCourtIdAndStatusAndDateGreaterThanEqualOrderByDateAscStartTimeAsc(
+                courtId, ReservationStatus.CONFIRMED, now.toLocalDate());
+        List<Reservation> upcoming = new ArrayList<>();
+
+        for (Reservation reservation : fromToday) {
+            boolean startsLater = LocalDateTime.of(reservation.getDate(), reservation.getStartTime()).isAfter(now);
+
+            if (startsLater) {
+                upcoming.add(reservation);
+            }
+        }
+
+        return upcoming;
     }
 
     private List<Long> courtIdsToSearch(Long clubId, Long courtId) {

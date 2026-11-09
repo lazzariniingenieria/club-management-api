@@ -13,4 +13,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     List<Reservation> findByCourtIdInAndDateAndStatusOrderByStartTimeAsc(Collection<Long> courtIds, LocalDate date,
             ReservationStatus status);
+
+    List<Reservation> findByCourtIdAndStatusAndDateGreaterThanEqualOrderByDateAscStartTimeAsc(Long courtId, ReservationStatus status,
+            LocalDate date);
 }

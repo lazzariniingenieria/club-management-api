@@ -185,6 +185,25 @@ class ReservationControllerTest {
     }
 
     @Test
+    void shouldListTheUpcomingReservationsOfACourt() throws Exception {
+        when(reservationService.listUpcomingReservations(CLUB_ID, COURT_ID))
+                .thenReturn(List.of(reservationResponse(ReservationStatus.CONFIRMED)));
+
+        mockMvc.perform(get("/api/reservations/upcoming").with(asAdmin()).param("courtId", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id", is(20)));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenListingUpcomingWithoutACourt() throws Exception {
+        mockMvc.perform(get("/api/reservations/upcoming").with(asAdmin()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]", is("courtId: courtId is required")));
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
     void shouldCancelReservation() throws Exception {
         when(reservationService.cancelReservation(any(AuthenticatedUser.class), eq(RESERVATION_ID)))
                 .thenReturn(reservationResponse(ReservationStatus.CANCELLED));
