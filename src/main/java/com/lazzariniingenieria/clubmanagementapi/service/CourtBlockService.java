@@ -68,7 +68,8 @@ public class CourtBlockService {
                 .orElseThrow(() -> new CourtBlockNotFoundException(courtBlockId));
 
         courtBlockRepository.delete(courtBlock);
-        log.info("Removed courtBlockId={} from courtId={} in clubId={}", courtBlockId, courtId, currentUser.clubId());
+        log.info("Removed courtBlockId={} from courtId={} in clubId={} by userAccountId={}", courtBlockId, courtId, currentUser.clubId(),
+                currentUser.userAccountId());
     }
 
     private void validateCourtExists(Long clubId, Long courtId) {
