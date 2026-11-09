@@ -211,7 +211,8 @@ class CourtBlockControllerTest {
         mockMvc.perform(get(BLOCKS_PATH, COURT_ID)
                         .with(asAdmin())
                         .param("from", "03/08/2026"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]", is("from: invalid value")));
 
         verifyNoInteractions(courtBlockService);
     }
