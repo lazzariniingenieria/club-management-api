@@ -262,6 +262,17 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnNotFoundWithExceptionMessageWhenCourtBlockDoesNotExist() {
+        CourtBlockNotFoundException exception = new CourtBlockNotFoundException(8L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleCourtBlockNotFound(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body.message()).isEqualTo("Court block 8 not found");
+    }
+
+    @Test
     void shouldReturnConflictWithExceptionMessageWhenCourtNameIsDuplicated() {
         DuplicateCourtNameException exception = new DuplicateCourtNameException("Cancha 1");
 

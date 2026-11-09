@@ -11,6 +11,8 @@ public interface CourtRepository extends JpaRepository<Court, Long> {
 
     boolean existsByClubIdAndNameIgnoreCaseAndIdNot(Long clubId, String name, Long id);
 
+    boolean existsByIdAndClubId(Long id, Long clubId);
+
     Optional<Court> findByIdAndClubId(Long id, Long clubId);
 
     List<Court> findByClubIdOrderByNameAsc(Long clubId);

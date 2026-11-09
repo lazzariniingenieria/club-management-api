@@ -127,6 +127,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(CourtBlockNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handleCourtBlockNotFound(CourtBlockNotFoundException exception) {
+        log.warn("Court block lookup failed: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(DuplicateCourtNameException.class)
     public ResponseEntity<ApiErrorDto> handleDuplicateCourtName(DuplicateCourtNameException exception) {
         log.warn("Rejected request due to duplicate court name: {}", exception.getMessage());
