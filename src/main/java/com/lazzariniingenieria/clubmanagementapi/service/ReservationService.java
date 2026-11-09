@@ -76,13 +76,6 @@ public class ReservationService {
         return reservationMapper.toResponseList(reservations);
     }
 
-    public List<ReservationResponse> listUpcomingReservations(Long clubId, Long courtId) {
-        validateCourtExists(clubId, courtId);
-        List<Reservation> upcoming = upcomingReservationsOf(courtId);
-
-        return reservationMapper.toResponseList(upcoming);
-    }
-
     public int cancelUpcomingReservations(AuthenticatedUser currentUser, Long courtId) {
         List<Reservation> upcoming = upcomingReservationsOf(courtId);
         Instant now = Instant.now(clubClock);
