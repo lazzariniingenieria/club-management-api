@@ -41,6 +41,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/payments/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/clubs/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/courts/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers("/api/reservations/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .anyRequest().authenticated());
         JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtService, accountSessionService);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

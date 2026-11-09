@@ -262,6 +262,44 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnNotFoundWithExceptionMessageWhenReservationDoesNotExist() {
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleReservationNotFound(new ReservationNotFoundException(20L));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().message()).isEqualTo("Reservation 20 not found");
+    }
+
+    @Test
+    void shouldReturnBadRequestWithExceptionMessageWhenReservationIsInvalid() {
+        InvalidReservationException exception = new InvalidReservationException("reservation cannot start in the past");
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleInvalidReservation(exception);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().message()).isEqualTo("reservation cannot start in the past");
+    }
+
+    @Test
+    void shouldReturnConflictWithExceptionMessageWhenReservationSlotIsTaken() {
+        ReservationSlotTakenException exception = new ReservationSlotTakenException("court 3 is blocked at that time");
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleReservationSlotTaken(exception);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().message()).isEqualTo("court 3 is blocked at that time");
+    }
+
+    @Test
+    void shouldReturnConflictWithExceptionMessageWhenReservationIsAlreadyCancelled() {
+        ReservationAlreadyCancelledException exception = new ReservationAlreadyCancelledException(20L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleReservationAlreadyCancelled(exception);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().message()).isEqualTo("Reservation 20 is already cancelled");
+    }
+
+    @Test
     void shouldReturnNotFoundWithExceptionMessageWhenCourtBlockDoesNotExist() {
         CourtBlockNotFoundException exception = new CourtBlockNotFoundException(8L);
 
