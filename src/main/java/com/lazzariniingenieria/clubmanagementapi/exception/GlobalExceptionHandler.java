@@ -120,6 +120,27 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(CourtNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handleCourtNotFound(CourtNotFoundException exception) {
+        log.warn("Court lookup failed: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(DuplicateCourtNameException.class)
+    public ResponseEntity<ApiErrorDto> handleDuplicateCourtName(DuplicateCourtNameException exception) {
+        log.warn("Rejected request due to duplicate court name: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(InvalidCourtHoursException.class)
+    public ResponseEntity<ApiErrorDto> handleInvalidCourtHours(InvalidCourtHoursException exception) {
+        log.warn("Rejected court with invalid hours: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(InvalidDateRangeException.class)
     public ResponseEntity<ApiErrorDto> handleInvalidDateRange(InvalidDateRangeException exception) {
         log.warn("Rejected request with an invalid date range: {}", exception.getMessage());

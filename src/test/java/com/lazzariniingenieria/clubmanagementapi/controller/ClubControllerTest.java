@@ -66,7 +66,8 @@ class ClubControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(1)))
                 .andExpect(jsonPath("$.name", is("Club 1")))
-                .andExpect(jsonPath("$.monthlyFeeAmount", is(15000.00)));
+                .andExpect(jsonPath("$.monthlyFeeAmount", is(15000.00)))
+                .andExpect(jsonPath("$.courtsEnabled", is(true)));
     }
 
     @Test
@@ -178,7 +179,7 @@ class ClubControllerTest {
     }
 
     private ClubResponse clubResponse(BigDecimal monthlyFeeAmount) {
-        return new ClubResponse(CLUB_ID, "Club 1", monthlyFeeAmount, Instant.parse("2026-10-01T12:00:00Z"), 1L);
+        return new ClubResponse(CLUB_ID, "Club 1", monthlyFeeAmount, true, Instant.parse("2026-10-01T12:00:00Z"), 1L);
     }
 
     private RequestPostProcessor asSuperAdmin() {

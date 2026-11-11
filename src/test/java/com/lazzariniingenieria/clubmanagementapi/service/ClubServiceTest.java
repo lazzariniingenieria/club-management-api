@@ -65,6 +65,26 @@ class ClubServiceTest {
     }
 
     @Test
+    void shouldTellWhetherTheClubHasCourtsEnabled() {
+        Club club = club(null);
+        club.setCourtsEnabled(true);
+        when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club));
+
+        ClubResponse response = clubService.getClub(CLUB_ID);
+
+        assertThat(response.courtsEnabled()).isTrue();
+    }
+
+    @Test
+    void shouldReportCourtsDisabledByDefault() {
+        when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club(null)));
+
+        ClubResponse response = clubService.getClub(CLUB_ID);
+
+        assertThat(response.courtsEnabled()).isFalse();
+    }
+
+    @Test
     void shouldThrowClubNotFoundWhenTokenClubHasNoRow() {
         when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.empty());
 
