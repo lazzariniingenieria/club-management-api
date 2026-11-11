@@ -45,8 +45,15 @@ public class SecurityConfig {
                 .anyRequest().authenticated());
         JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtService, accountSessionService);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-        http.addFilterAfter(new ShallowEtagHeaderFilter(), HeaderWriterFilter.class);
+        http.addFilterAfter(weakETagFilterThatKeepsCompression(), HeaderWriterFilter.class);
 
         return http.build();
+    }
+
+    private ShallowEtagHeaderFilter weakETagFilterThatKeepsCompression() {
+        ShallowEtagHeaderFilter eTagFilter = new ShallowEtagHeaderFilter();
+        eTagFilter.setWriteWeakETag(true);
+
+        return eTagFilter;
     }
 }

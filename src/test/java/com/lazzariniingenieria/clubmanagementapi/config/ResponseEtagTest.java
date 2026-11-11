@@ -2,6 +2,7 @@ package com.lazzariniingenieria.clubmanagementapi.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -57,6 +58,15 @@ class ResponseEtagTest {
         mockMvc.perform(get(MEMBERS_PATH).with(asAdmin()))
                 .andExpect(status().isOk())
                 .andExpect(header().exists(HttpHeaders.ETAG));
+    }
+
+    @Test
+    void shouldSendAWeakEtagSoTheServerCanStillCompressTheResponse() throws Exception {
+        when(memberService.listMembers(CLUB_ID)).thenReturn(List.of(memberResponse("Marcos")));
+
+        mockMvc.perform(get(MEMBERS_PATH).with(asAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ETAG, startsWith("W/")));
     }
 
     @Test
