@@ -134,6 +134,34 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(ReservationNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handleReservationNotFound(ReservationNotFoundException exception) {
+        log.warn("Reservation lookup failed: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(InvalidReservationException.class)
+    public ResponseEntity<ApiErrorDto> handleInvalidReservation(InvalidReservationException exception) {
+        log.warn("Rejected invalid reservation: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ReservationSlotTakenException.class)
+    public ResponseEntity<ApiErrorDto> handleReservationSlotTaken(ReservationSlotTakenException exception) {
+        log.warn("Rejected reservation of a taken slot: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ReservationAlreadyCancelledException.class)
+    public ResponseEntity<ApiErrorDto> handleReservationAlreadyCancelled(ReservationAlreadyCancelledException exception) {
+        log.warn("Rejected cancellation of an already cancelled reservation: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(DuplicateCourtNameException.class)
     public ResponseEntity<ApiErrorDto> handleDuplicateCourtName(DuplicateCourtNameException exception) {
         log.warn("Rejected request due to duplicate court name: {}", exception.getMessage());

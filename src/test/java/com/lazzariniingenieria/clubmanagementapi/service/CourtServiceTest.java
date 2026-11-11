@@ -47,13 +47,16 @@ class CourtServiceTest {
     @Mock
     private CourtRepository courtRepository;
 
+    @Mock
+    private ReservationService reservationService;
+
     private final CourtMapper courtMapper = new CourtMapperImpl();
 
     private CourtService courtService;
 
     @BeforeEach
     void setUp() {
-        courtService = new CourtService(courtRepository, courtMapper);
+        courtService = new CourtService(courtRepository, courtMapper, reservationService);
     }
 
     @Test
@@ -211,6 +214,26 @@ class CourtServiceTest {
     }
 
     @Test
+    void shouldCancelTheUpcomingReservationsWhenDeactivatingTheCourt() {
+        Court existingCourt = court(PREVIOUS_ACTOR_ID);
+        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.of(existingCourt));
+        when(courtRepository.save(existingCourt)).thenReturn(existingCourt);
+
+        courtService.deactivateCourt(CURRENT_USER, COURT_ID);
+
+        verify(reservationService).cancelUpcomingReservations(CURRENT_USER, COURT_ID);
+    }
+
+    @Test
+    void shouldNotCancelReservationsWhenTheCourtIsNotFound() {
+        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> courtService.deactivateCourt(CURRENT_USER, COURT_ID)).isInstanceOf(CourtNotFoundException.class);
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
     void shouldReactivateCourtWhenFound() {
         Court existingCourt = court(PREVIOUS_ACTOR_ID);
         existingCourt.setActive(false);
@@ -220,6 +243,7 @@ class CourtServiceTest {
         CourtResponse response = courtService.reactivateCourt(CURRENT_USER, COURT_ID);
 
         assertThat(existingCourt.isActive()).isTrue();
+        verifyNoInteractions(reservationService);
         assertThat(existingCourt.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
         assertThat(existingCourt.getUpdatedAt()).isNotEqualTo(CREATED_AT);
         assertThat(response.active()).isTrue();
