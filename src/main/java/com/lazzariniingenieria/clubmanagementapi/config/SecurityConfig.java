@@ -15,6 +15,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.HeaderWriterFilter;
+import org.springframework.web.filter.ShallowEtagHeaderFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -45,7 +47,15 @@ public class SecurityConfig {
                 .anyRequest().authenticated());
         JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtService, accountSessionService);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterAfter(weakETagFilterThatKeepsCompression(), HeaderWriterFilter.class);
 
         return http.build();
+    }
+
+    private ShallowEtagHeaderFilter weakETagFilterThatKeepsCompression() {
+        ShallowEtagHeaderFilter eTagFilter = new ShallowEtagHeaderFilter();
+        eTagFilter.setWriteWeakETag(true);
+
+        return eTagFilter;
     }
 }
