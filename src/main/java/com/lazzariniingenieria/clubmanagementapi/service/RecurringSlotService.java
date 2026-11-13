@@ -140,7 +140,7 @@ public class RecurringSlotService {
 
     private void validateRules(Long clubId, CreateRecurringSlotRequest request, String description) {
         courtBookingRules.validateCourtsEnabled(clubId);
-        Court court = courtBookingRules.findActiveCourtOrThrow(clubId, request.courtId());
+        Court court = courtBookingRules.lockActiveCourtOrThrow(clubId, request.courtId());
         validateOwner(clubId, request.memberId(), description);
         courtBookingRules.validateFitsCourtHours(court, request.startTime(), request.endTime());
         validateValidity(request.validFrom(), request.validUntil());
@@ -217,8 +217,8 @@ public class RecurringSlotService {
     }
 
     private Map<LocalDate, List<Reservation>> confirmedReservationsByDate(Long courtId, List<LocalDate> dates) {
-        List<Reservation> reservations = reservationRepository.findByCourtIdAndStatusAndDateBetween(courtId, ReservationStatus.CONFIRMED,
-                dates.getFirst(), dates.getLast());
+        List<Reservation> reservations = reservationRepository.findByCourtIdAndStatusAndDateBetweenOrderByDateAscStartTimeAsc(courtId,
+                ReservationStatus.CONFIRMED, dates.getFirst(), dates.getLast());
         Map<LocalDate, List<Reservation>> reservationsByDate = new HashMap<>();
 
         for (Reservation reservation : reservations) {

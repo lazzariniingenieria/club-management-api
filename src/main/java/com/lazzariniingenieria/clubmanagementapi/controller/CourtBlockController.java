@@ -1,8 +1,10 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
+import com.lazzariniingenieria.clubmanagementapi.dto.AffectedReservationsSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CourtBlockResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CourtBlockSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateCourtBlockRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.service.CourtBlockService;
 import jakarta.validation.Valid;
@@ -41,6 +43,15 @@ public class CourtBlockController {
                                                          @PathVariable Long courtId,
                                                          @ModelAttribute CourtBlockSearchRequest filter) {
         List<CourtBlockResponse> response = courtBlockService.listCourtBlocks(currentUser.clubId(), courtId, filter);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/affected-reservations")
+    public ResponseEntity<List<ReservationResponse>> listAffected(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                                  @PathVariable Long courtId,
+                                                                  @Valid @ModelAttribute AffectedReservationsSearchRequest filter) {
+        List<ReservationResponse> response = courtBlockService.listAffectedReservations(currentUser.clubId(), courtId, filter);
 
         return ResponseEntity.ok(response);
     }

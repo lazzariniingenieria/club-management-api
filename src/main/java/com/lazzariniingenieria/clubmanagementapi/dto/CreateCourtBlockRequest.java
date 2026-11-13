@@ -3,6 +3,7 @@ package com.lazzariniingenieria.clubmanagementapi.dto;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record CreateCourtBlockRequest(@NotNull(message = "startsAt is required")
                                       LocalDateTime startsAt,
@@ -11,5 +12,7 @@ public record CreateCourtBlockRequest(@NotNull(message = "startsAt is required")
                                       LocalDateTime endsAt,
 
                                       @Size(max = 150, message = "reason must be at most 150 characters")
-                                      String reason) {
+                                      String reason,
+
+                                      List<Long> reservationIdsToCancel) {
 }
