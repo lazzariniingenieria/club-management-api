@@ -31,8 +31,12 @@ public class CourtBookingRules {
         }
     }
 
-    public Court findActiveCourtOrThrow(Long clubId, Long courtId) {
-        Court court = courtRepository.findByIdAndClubId(courtId, clubId).orElseThrow(() -> new CourtNotFoundException(courtId));
+    public Court lockCourtOrThrow(Long clubId, Long courtId) {
+        return courtRepository.findByIdAndClubIdForUpdate(courtId, clubId).orElseThrow(() -> new CourtNotFoundException(courtId));
+    }
+
+    public Court lockActiveCourtOrThrow(Long clubId, Long courtId) {
+        Court court = lockCourtOrThrow(clubId, courtId);
 
         if (!court.isActive()) {
             throw new InvalidReservationException("court " + courtId + " is not active");

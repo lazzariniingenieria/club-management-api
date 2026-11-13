@@ -1,5 +1,6 @@
 package com.lazzariniingenieria.clubmanagementapi.service;
 
+import com.lazzariniingenieria.clubmanagementapi.dto.CreateCourtBlockRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateReservationRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationSearchRequest;
@@ -9,6 +10,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.RecurringSlot;
 import com.lazzariniingenieria.clubmanagementapi.entity.Reservation;
 import com.lazzariniingenieria.clubmanagementapi.entity.ReservationSource;
 import com.lazzariniingenieria.clubmanagementapi.entity.ReservationStatus;
+import com.lazzariniingenieria.clubmanagementapi.exception.CourtBlockAffectsUnseenReservationsException;
 import com.lazzariniingenieria.clubmanagementapi.exception.CourtNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidReservationException;
 import com.lazzariniingenieria.clubmanagementapi.exception.ReservationAlreadyCancelledException;
@@ -33,6 +35,7 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -47,10 +50,11 @@ public class ReservationService {
     private final ReservationMapper reservationMapper;
     private final Clock clubClock;
 
+    @Transactional
     public ReservationResponse createReservation(AuthenticatedUser currentUser, CreateReservationRequest request) {
         Long clubId = currentUser.clubId();
         courtBookingRules.validateCourtsEnabled(clubId);
-        Court court = courtBookingRules.findActiveCourtOrThrow(clubId, request.courtId());
+        Court court = courtBookingRules.lockActiveCourtOrThrow(clubId, request.courtId());
         courtBookingRules.validateMemberIsActive(clubId, request.memberId());
         courtBookingRules.validateFitsCourtHours(court, request.startTime(), request.endTime());
         validateStartsInTheFuture(request);
@@ -75,6 +79,23 @@ public class ReservationService {
                 filter.date(), ReservationStatus.CONFIRMED);
 
         return toResponses(reservations);
+    }
+
+    public List<ReservationResponse> listReservationsAffectedByBlock(Long courtId, LocalDateTime startsAt, LocalDateTime endsAt) {
+        List<Reservation> affected = upcomingReservationsOverlapping(courtId, startsAt, endsAt);
+
+        return toResponses(affected);
+    }
+
+    public int cancelReservationsAffectedByBlock(AuthenticatedUser currentUser, Long courtId, CreateCourtBlockRequest request) {
+        List<Reservation> affected = upcomingReservationsOverlapping(courtId, request.startsAt(), request.endsAt());
+        validateEveryAffectedReservationWasShown(affected, request.reservationIdsToCancel());
+        markCancelled(currentUser, affected);
+        reservationRepository.saveAll(affected);
+        log.info("Cancelled {} reservation(s) of courtId={} overlapping a block from {} to {} in clubId={} by userAccountId={}",
+                affected.size(), courtId, request.startsAt(), request.endsAt(), currentUser.clubId(), currentUser.userAccountId());
+
+        return affected.size();
     }
 
     public int cancelUpcomingReservationsOfCourt(AuthenticatedUser currentUser, Long courtId) {
@@ -158,23 +179,66 @@ public class ReservationService {
 
     private int cancelNotYetStarted(AuthenticatedUser currentUser, List<Reservation> fromToday) {
         LocalDateTime now = LocalDateTime.now(clubClock);
-        Instant cancelledAt = Instant.now(clubClock);
         List<Reservation> upcoming = new ArrayList<>();
 
         for (Reservation reservation : fromToday) {
-            boolean startsLater = LocalDateTime.of(reservation.getDate(), reservation.getStartTime()).isAfter(now);
-
-            if (startsLater) {
-                reservation.setStatus(ReservationStatus.CANCELLED);
-                reservation.setCancelledAt(cancelledAt);
-                reservation.setCancelledByUserId(currentUser.userAccountId());
+            if (startOf(reservation).isAfter(now)) {
                 upcoming.add(reservation);
             }
         }
 
+        markCancelled(currentUser, upcoming);
         reservationRepository.saveAll(upcoming);
 
         return upcoming.size();
+    }
+
+    private List<Reservation> upcomingReservationsOverlapping(Long courtId, LocalDateTime startsAt, LocalDateTime endsAt) {
+        LocalDateTime now = LocalDateTime.now(clubClock);
+        List<Reservation> sameDays = reservationRepository.findByCourtIdAndStatusAndDateBetweenOrderByDateAscStartTimeAsc(courtId,
+                ReservationStatus.CONFIRMED, startsAt.toLocalDate(), endsAt.toLocalDate());
+        List<Reservation> affected = new ArrayList<>();
+
+        for (Reservation reservation : sameDays) {
+            boolean overlaps = startOf(reservation).isBefore(endsAt) && endOf(reservation).isAfter(startsAt);
+            boolean startsLater = startOf(reservation).isAfter(now);
+
+            if (overlaps && startsLater) {
+                affected.add(reservation);
+            }
+        }
+
+        return affected;
+    }
+
+    private void validateEveryAffectedReservationWasShown(List<Reservation> affected, List<Long> reservationIdsToCancel) {
+        Set<Long> shownIds = new HashSet<>();
+        List<String> unseen = new ArrayList<>();
+
+        if (reservationIdsToCancel != null) {
+            shownIds.addAll(reservationIdsToCancel);
+        }
+
+        for (Reservation reservation : affected) {
+            if (!shownIds.contains(reservation.getId())) {
+                unseen.add("reservation " + reservation.getId() + " on " + reservation.getDate() + " " + reservation.getStartTime() + "-"
+                        + reservation.getEndTime());
+            }
+        }
+
+        if (!unseen.isEmpty()) {
+            throw new CourtBlockAffectsUnseenReservationsException(unseen);
+        }
+    }
+
+    private void markCancelled(AuthenticatedUser currentUser, List<Reservation> reservations) {
+        Instant cancelledAt = Instant.now(clubClock);
+
+        for (Reservation reservation : reservations) {
+            reservation.setStatus(ReservationStatus.CANCELLED);
+            reservation.setCancelledAt(cancelledAt);
+            reservation.setCancelledByUserId(currentUser.userAccountId());
+        }
     }
 
     private List<Long> courtIdsToSearch(Long clubId, Long courtId) {
@@ -265,6 +329,14 @@ public class ReservationService {
         }
 
         return descriptionsByRecurringSlotId;
+    }
+
+    private LocalDateTime startOf(Reservation reservation) {
+        return LocalDateTime.of(reservation.getDate(), reservation.getStartTime());
+    }
+
+    private LocalDateTime endOf(Reservation reservation) {
+        return LocalDateTime.of(reservation.getDate(), reservation.getEndTime());
     }
 
     private LocalDateTime startOf(CreateReservationRequest request) {
