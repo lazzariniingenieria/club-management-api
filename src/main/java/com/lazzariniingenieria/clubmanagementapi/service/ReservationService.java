@@ -3,33 +3,33 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateReservationRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationSearchRequest;
-import com.lazzariniingenieria.clubmanagementapi.entity.Club;
 import com.lazzariniingenieria.clubmanagementapi.entity.Court;
 import com.lazzariniingenieria.clubmanagementapi.entity.CourtBlock;
-import com.lazzariniingenieria.clubmanagementapi.entity.Member;
-import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
+import com.lazzariniingenieria.clubmanagementapi.entity.RecurringSlot;
 import com.lazzariniingenieria.clubmanagementapi.entity.Reservation;
 import com.lazzariniingenieria.clubmanagementapi.entity.ReservationSource;
 import com.lazzariniingenieria.clubmanagementapi.entity.ReservationStatus;
-import com.lazzariniingenieria.clubmanagementapi.exception.ClubNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.CourtNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidReservationException;
-import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.ReservationAlreadyCancelledException;
 import com.lazzariniingenieria.clubmanagementapi.exception.ReservationNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.ReservationSlotTakenException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.ReservationMapper;
-import com.lazzariniingenieria.clubmanagementapi.repository.ClubRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtBlockRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtRepository;
-import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.RecurringSlotRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.ReservationRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,17 +42,18 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final CourtRepository courtRepository;
     private final CourtBlockRepository courtBlockRepository;
-    private final MemberRepository memberRepository;
-    private final ClubRepository clubRepository;
+    private final RecurringSlotRepository recurringSlotRepository;
+    private final CourtBookingRules courtBookingRules;
     private final ReservationMapper reservationMapper;
     private final Clock clubClock;
 
     public ReservationResponse createReservation(AuthenticatedUser currentUser, CreateReservationRequest request) {
         Long clubId = currentUser.clubId();
-        validateCourtsEnabled(clubId);
-        Court court = findActiveCourtOrThrow(clubId, request.courtId());
-        validateMemberIsActive(clubId, request.memberId());
-        validateSchedule(court, request);
+        courtBookingRules.validateCourtsEnabled(clubId);
+        Court court = courtBookingRules.findActiveCourtOrThrow(clubId, request.courtId());
+        courtBookingRules.validateMemberIsActive(clubId, request.memberId());
+        courtBookingRules.validateFitsCourtHours(court, request.startTime(), request.endTime());
+        validateStartsInTheFuture(request);
         validateCourtIsNotBlocked(court.getId(), request);
         validateSlotIsNotReserved(court.getId(), request);
 
@@ -60,7 +61,7 @@ public class ReservationService {
         log.info("Reserved courtId={} on {} from {} to {} for memberId={} with reservationId={} in clubId={}", court.getId(),
                 request.date(), request.startTime(), request.endTime(), request.memberId(), savedReservation.getId(), clubId);
 
-        return reservationMapper.toResponse(savedReservation);
+        return toResponse(savedReservation);
     }
 
     public List<ReservationResponse> listReservations(Long clubId, ReservationSearchRequest filter) {
@@ -73,24 +74,37 @@ public class ReservationService {
         List<Reservation> reservations = reservationRepository.findByCourtIdInAndDateAndStatusOrderByStartTimeAsc(courtIds,
                 filter.date(), ReservationStatus.CONFIRMED);
 
-        return reservationMapper.toResponseList(reservations);
+        return toResponses(reservations);
     }
 
-    public int cancelUpcomingReservations(AuthenticatedUser currentUser, Long courtId) {
-        List<Reservation> upcoming = upcomingReservationsOf(courtId);
-        Instant now = Instant.now(clubClock);
-
-        for (Reservation reservation : upcoming) {
-            reservation.setStatus(ReservationStatus.CANCELLED);
-            reservation.setCancelledAt(now);
-            reservation.setCancelledByUserId(currentUser.userAccountId());
-        }
-
-        reservationRepository.saveAll(upcoming);
-        log.info("Cancelled {} upcoming reservation(s) of courtId={} in clubId={} by userAccountId={}", upcoming.size(), courtId,
+    public int cancelUpcomingReservationsOfCourt(AuthenticatedUser currentUser, Long courtId) {
+        List<Reservation> fromToday = reservationRepository.findByCourtIdAndStatusAndDateGreaterThanEqualOrderByDateAscStartTimeAsc(
+                courtId, ReservationStatus.CONFIRMED, LocalDate.now(clubClock));
+        int cancelledCount = cancelNotYetStarted(currentUser, fromToday);
+        log.info("Cancelled {} upcoming reservation(s) of courtId={} in clubId={} by userAccountId={}", cancelledCount, courtId,
                 currentUser.clubId(), currentUser.userAccountId());
 
-        return upcoming.size();
+        return cancelledCount;
+    }
+
+    public int cancelUpcomingReservationsOfMember(AuthenticatedUser currentUser, Long memberId) {
+        List<Reservation> fromToday = reservationRepository.findByMemberIdAndStatusAndDateGreaterThanEqual(memberId,
+                ReservationStatus.CONFIRMED, LocalDate.now(clubClock));
+        int cancelledCount = cancelNotYetStarted(currentUser, fromToday);
+        log.info("Cancelled {} upcoming reservation(s) of memberId={} in clubId={} by userAccountId={}", cancelledCount, memberId,
+                currentUser.clubId(), currentUser.userAccountId());
+
+        return cancelledCount;
+    }
+
+    public int cancelUpcomingReservationsOfRecurringSlot(AuthenticatedUser currentUser, Long recurringSlotId) {
+        List<Reservation> fromToday = reservationRepository.findByRecurringSlotIdAndStatusAndDateGreaterThanEqual(recurringSlotId,
+                ReservationStatus.CONFIRMED, LocalDate.now(clubClock));
+        int cancelledCount = cancelNotYetStarted(currentUser, fromToday);
+        log.info("Cancelled {} upcoming reservation(s) of recurringSlotId={} in clubId={} by userAccountId={}", cancelledCount,
+                recurringSlotId, currentUser.clubId(), currentUser.userAccountId());
+
+        return cancelledCount;
     }
 
     public ReservationResponse cancelReservation(AuthenticatedUser currentUser, Long reservationId) {
@@ -108,44 +122,11 @@ public class ReservationService {
         log.info("Cancelled reservationId={} in clubId={} by userAccountId={}", reservationId, currentUser.clubId(),
                 currentUser.userAccountId());
 
-        return reservationMapper.toResponse(savedReservation);
+        return toResponse(savedReservation);
     }
 
-    private void validateCourtsEnabled(Long clubId) {
-        Club club = clubRepository.findById(clubId).orElseThrow(() -> new ClubNotFoundException(clubId));
-
-        if (!club.isCourtsEnabled()) {
-            throw new InvalidReservationException("courts are not enabled for club " + clubId);
-        }
-    }
-
-    private Court findActiveCourtOrThrow(Long clubId, Long courtId) {
-        Court court = courtRepository.findByIdAndClubId(courtId, clubId).orElseThrow(() -> new CourtNotFoundException(courtId));
-
-        if (!court.isActive()) {
-            throw new InvalidReservationException("court " + courtId + " is not active");
-        }
-
-        return court;
-    }
-
-    private void validateMemberIsActive(Long clubId, Long memberId) {
-        Member member = memberRepository.findByIdAndClubId(memberId, clubId).orElseThrow(() -> new MemberNotFoundException(memberId));
-
-        if (member.getStatus() != MemberStatus.ACTIVE) {
-            throw new InvalidReservationException("member " + memberId + " is not active");
-        }
-    }
-
-    private void validateSchedule(Court court, CreateReservationRequest request) {
-        boolean endsAfterStarts = request.endTime().isAfter(request.startTime());
-        boolean withinCourtHours = !request.startTime().isBefore(court.getOpeningTime())
-                && !request.endTime().isAfter(court.getClosingTime());
+    private void validateStartsInTheFuture(CreateReservationRequest request) {
         boolean startsInThePast = startOf(request).isBefore(LocalDateTime.now(clubClock));
-
-        if (!endsAfterStarts || !withinCourtHours) {
-            throw new InvalidReservationException("reservation must end after it starts and fit the hours of court " + court.getId());
-        }
 
         if (startsInThePast) {
             throw new InvalidReservationException("reservation cannot start in the past");
@@ -175,21 +156,25 @@ public class ReservationService {
         }
     }
 
-    private List<Reservation> upcomingReservationsOf(Long courtId) {
+    private int cancelNotYetStarted(AuthenticatedUser currentUser, List<Reservation> fromToday) {
         LocalDateTime now = LocalDateTime.now(clubClock);
-        List<Reservation> fromToday = reservationRepository.findByCourtIdAndStatusAndDateGreaterThanEqualOrderByDateAscStartTimeAsc(
-                courtId, ReservationStatus.CONFIRMED, now.toLocalDate());
+        Instant cancelledAt = Instant.now(clubClock);
         List<Reservation> upcoming = new ArrayList<>();
 
         for (Reservation reservation : fromToday) {
             boolean startsLater = LocalDateTime.of(reservation.getDate(), reservation.getStartTime()).isAfter(now);
 
             if (startsLater) {
+                reservation.setStatus(ReservationStatus.CANCELLED);
+                reservation.setCancelledAt(cancelledAt);
+                reservation.setCancelledByUserId(currentUser.userAccountId());
                 upcoming.add(reservation);
             }
         }
 
-        return upcoming;
+        reservationRepository.saveAll(upcoming);
+
+        return upcoming.size();
     }
 
     private List<Long> courtIdsToSearch(Long clubId, Long courtId) {
@@ -240,6 +225,46 @@ public class ReservationService {
                 .createdAt(Instant.now(clubClock))
                 .createdByUserId(currentUser.userAccountId())
                 .build();
+    }
+
+    private ReservationResponse toResponse(Reservation reservation) {
+        List<ReservationResponse> responses = toResponses(List.of(reservation));
+
+        return responses.getFirst();
+    }
+
+    private List<ReservationResponse> toResponses(List<Reservation> reservations) {
+        Map<Long, String> descriptionsByRecurringSlotId = descriptionsOfRecurringSlots(reservations);
+        List<ReservationResponse> responses = new ArrayList<>();
+
+        for (Reservation reservation : reservations) {
+            String description = descriptionsByRecurringSlotId.get(reservation.getRecurringSlotId());
+            responses.add(reservationMapper.toResponse(reservation, description));
+        }
+
+        return responses;
+    }
+
+    private Map<Long, String> descriptionsOfRecurringSlots(List<Reservation> reservations) {
+        Set<Long> recurringSlotIds = new HashSet<>();
+
+        for (Reservation reservation : reservations) {
+            if (reservation.getRecurringSlotId() != null) {
+                recurringSlotIds.add(reservation.getRecurringSlotId());
+            }
+        }
+
+        Map<Long, String> descriptionsByRecurringSlotId = new HashMap<>();
+
+        if (recurringSlotIds.isEmpty()) {
+            return descriptionsByRecurringSlotId;
+        }
+
+        for (RecurringSlot recurringSlot : recurringSlotRepository.findAllById(recurringSlotIds)) {
+            descriptionsByRecurringSlotId.put(recurringSlot.getId(), recurringSlot.getDescription());
+        }
+
+        return descriptionsByRecurringSlotId;
     }
 
     private LocalDateTime startOf(CreateReservationRequest request) {

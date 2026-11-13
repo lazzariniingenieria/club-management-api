@@ -1,6 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -165,6 +166,19 @@ class ReservationControllerTest {
     }
 
     @Test
+    void shouldListActivityOccurrencesWithTheirRecurringSlotAndDescription() throws Exception {
+        when(reservationService.listReservations(CLUB_ID, new ReservationSearchRequest(DATE, null)))
+                .thenReturn(List.of(activityOccurrenceResponse()));
+
+        mockMvc.perform(get("/api/reservations").with(asAdmin()).param("date", "2026-11-09"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].source", is("ACTIVITY")))
+                .andExpect(jsonPath("$[0].recurringSlotId", is(30)))
+                .andExpect(jsonPath("$[0].description", is("Escuela de tenis")))
+                .andExpect(jsonPath("$[0].memberId", nullValue()));
+    }
+
+    @Test
     void shouldListReservationsOfOneCourt() throws Exception {
         when(reservationService.listReservations(CLUB_ID, new ReservationSearchRequest(DATE, COURT_ID))).thenReturn(List.of());
 
@@ -225,8 +239,14 @@ class ReservationControllerTest {
     }
 
     private ReservationResponse reservationResponse(ReservationStatus status) {
-        return new ReservationResponse(RESERVATION_ID, COURT_ID, 10L, ReservationSource.MEMBER, DATE, LocalTime.of(22, 0),
+        return new ReservationResponse(RESERVATION_ID, COURT_ID, 10L, ReservationSource.MEMBER, null, null, DATE, LocalTime.of(22, 0),
                 LocalTime.of(23, 0), status, Instant.parse("2026-11-09T12:00:00Z"), 2L, null, null);
+    }
+
+    private ReservationResponse activityOccurrenceResponse() {
+        return new ReservationResponse(RESERVATION_ID, COURT_ID, null, ReservationSource.ACTIVITY, 30L, "Escuela de tenis", DATE,
+                LocalTime.of(17, 0), LocalTime.of(18, 0), ReservationStatus.CONFIRMED, Instant.parse("2026-11-09T12:00:00Z"), 2L, null,
+                null);
     }
 
     private RequestPostProcessor asSuperAdmin() {

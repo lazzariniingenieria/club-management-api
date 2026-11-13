@@ -14,6 +14,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.Club;
 import com.lazzariniingenieria.clubmanagementapi.entity.Court;
 import com.lazzariniingenieria.clubmanagementapi.entity.CourtBlock;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
+import com.lazzariniingenieria.clubmanagementapi.entity.RecurringSlot;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.Reservation;
 import com.lazzariniingenieria.clubmanagementapi.entity.ReservationSource;
@@ -31,6 +32,7 @@ import com.lazzariniingenieria.clubmanagementapi.repository.ClubRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtBlockRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.RecurringSlotRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.ReservationRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Clock;
@@ -41,6 +43,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +58,7 @@ class ReservationServiceTest {
     private static final Long COURT_ID = 3L;
     private static final Long MEMBER_ID = 10L;
     private static final Long RESERVATION_ID = 20L;
+    private static final Long RECURRING_SLOT_ID = 30L;
     private static final Long ACTING_USER_ID = 2L;
     private static final LocalDate TODAY = LocalDate.parse("2026-11-09");
     private static final Instant NOW = Instant.parse("2026-11-09T23:30:00Z");
@@ -76,14 +80,18 @@ class ReservationServiceTest {
     @Mock
     private ClubRepository clubRepository;
 
+    @Mock
+    private RecurringSlotRepository recurringSlotRepository;
+
     private final ReservationMapper reservationMapper = new ReservationMapperImpl();
 
     private ReservationService reservationService;
 
     @BeforeEach
     void setUp() {
-        reservationService = new ReservationService(reservationRepository, courtRepository, courtBlockRepository, memberRepository,
-                clubRepository, reservationMapper, CLUB_CLOCK);
+        CourtBookingRules courtBookingRules = new CourtBookingRules(clubRepository, courtRepository, memberRepository);
+        reservationService = new ReservationService(reservationRepository, courtRepository, courtBlockRepository, recurringSlotRepository,
+                courtBookingRules, reservationMapper, CLUB_CLOCK);
     }
 
     @Test
@@ -289,7 +297,7 @@ class ReservationServiceTest {
         Reservation laterToday = reservation("21:00", "22:00");
         stubFromToday(List.of(earlierToday, laterToday));
 
-        int cancelled = reservationService.cancelUpcomingReservations(CURRENT_USER, COURT_ID);
+        int cancelled = reservationService.cancelUpcomingReservationsOfCourt(CURRENT_USER, COURT_ID);
 
         assertThat(cancelled).isEqualTo(1);
         assertThat(earlierToday.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
@@ -303,9 +311,70 @@ class ReservationServiceTest {
     void shouldCancelNothingWhenTheCourtHasNoUpcomingReservations() {
         stubFromToday(List.of());
 
-        int cancelled = reservationService.cancelUpcomingReservations(CURRENT_USER, COURT_ID);
+        int cancelled = reservationService.cancelUpcomingReservationsOfCourt(CURRENT_USER, COURT_ID);
 
         assertThat(cancelled).isZero();
+    }
+
+    @Test
+    void shouldCancelOnlyTheUpcomingReservationsOfTheMember() {
+        Reservation earlierToday = reservation("18:00", "19:00");
+        Reservation laterToday = reservation("21:00", "22:00");
+        when(reservationRepository.findByMemberIdAndStatusAndDateGreaterThanEqual(MEMBER_ID, ReservationStatus.CONFIRMED, TODAY))
+                .thenReturn(List.of(earlierToday, laterToday));
+
+        int cancelled = reservationService.cancelUpcomingReservationsOfMember(CURRENT_USER, MEMBER_ID);
+
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(earlierToday.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(laterToday.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        verify(reservationRepository).saveAll(List.of(laterToday));
+    }
+
+    @Test
+    void shouldCancelOnlyTheUpcomingReservationsOfTheRecurringSlot() {
+        Reservation earlierToday = reservation("18:00", "19:00");
+        Reservation nextWeek = reservation("18:00", "19:00");
+        nextWeek.setDate(TODAY.plusWeeks(1));
+        when(reservationRepository.findByRecurringSlotIdAndStatusAndDateGreaterThanEqual(RECURRING_SLOT_ID, ReservationStatus.CONFIRMED,
+                TODAY)).thenReturn(List.of(earlierToday, nextWeek));
+
+        int cancelled = reservationService.cancelUpcomingReservationsOfRecurringSlot(CURRENT_USER, RECURRING_SLOT_ID);
+
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(earlierToday.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(nextWeek.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(nextWeek.getCancelledByUserId()).isEqualTo(ACTING_USER_ID);
+    }
+
+    @Test
+    void shouldListActivityOccurrencesWithTheDescriptionOfTheirRecurringSlot() {
+        Reservation activityOccurrence = reservation("21:00", "22:00");
+        activityOccurrence.setMemberId(null);
+        activityOccurrence.setSource(ReservationSource.ACTIVITY);
+        activityOccurrence.setRecurringSlotId(RECURRING_SLOT_ID);
+        RecurringSlot activity = RecurringSlot.builder().id(RECURRING_SLOT_ID).description("Escuela de tenis").build();
+        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        when(reservationRepository.findByCourtIdInAndDateAndStatusOrderByStartTimeAsc(List.of(COURT_ID), TODAY,
+                ReservationStatus.CONFIRMED)).thenReturn(List.of(activityOccurrence, reservation("19:00", "20:00")));
+        when(recurringSlotRepository.findAllById(Set.of(RECURRING_SLOT_ID))).thenReturn(List.of(activity));
+
+        List<ReservationResponse> response = reservationService.listReservations(CLUB_ID, new ReservationSearchRequest(TODAY, COURT_ID));
+
+        assertThat(response.get(0).recurringSlotId()).isEqualTo(RECURRING_SLOT_ID);
+        assertThat(response.get(0).description()).isEqualTo("Escuela de tenis");
+        assertThat(response.get(1).description()).isNull();
+    }
+
+    @Test
+    void shouldNotLookUpRecurringSlotsWhenNoListedReservationComesFromOne() {
+        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        when(reservationRepository.findByCourtIdInAndDateAndStatusOrderByStartTimeAsc(List.of(COURT_ID), TODAY,
+                ReservationStatus.CONFIRMED)).thenReturn(List.of(reservation("19:00", "20:00")));
+
+        reservationService.listReservations(CLUB_ID, new ReservationSearchRequest(TODAY, COURT_ID));
+
+        verify(recurringSlotRepository, never()).findAllById(any());
     }
 
     @Test
