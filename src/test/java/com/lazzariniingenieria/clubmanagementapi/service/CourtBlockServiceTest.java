@@ -5,21 +5,28 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.lazzariniingenieria.clubmanagementapi.dto.AffectedReservationsSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CourtBlockResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CourtBlockSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateCourtBlockRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
+import com.lazzariniingenieria.clubmanagementapi.entity.Court;
 import com.lazzariniingenieria.clubmanagementapi.entity.CourtBlock;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
+import com.lazzariniingenieria.clubmanagementapi.exception.CourtBlockAffectsUnseenReservationsException;
 import com.lazzariniingenieria.clubmanagementapi.exception.CourtBlockNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.CourtNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidDateRangeException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.CourtBlockMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.CourtBlockMapperImpl;
+import com.lazzariniingenieria.clubmanagementapi.repository.ClubRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtBlockRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtBlockSearchSpecification;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -52,18 +59,29 @@ class CourtBlockServiceTest {
     @Mock
     private CourtRepository courtRepository;
 
+    @Mock
+    private ClubRepository clubRepository;
+
+    @Mock
+    private MemberRepository memberRepository;
+
+    @Mock
+    private ReservationService reservationService;
+
     private final CourtBlockMapper courtBlockMapper = new CourtBlockMapperImpl();
 
     private CourtBlockService courtBlockService;
 
     @BeforeEach
     void setUp() {
-        courtBlockService = new CourtBlockService(courtBlockRepository, courtRepository, courtBlockMapper);
+        CourtBookingRules courtBookingRules = new CourtBookingRules(clubRepository, courtRepository, memberRepository);
+        courtBlockService = new CourtBlockService(courtBlockRepository, courtRepository, courtBlockMapper, courtBookingRules,
+                reservationService);
     }
 
     @Test
     void shouldBlockTheCourtRecordingWhoDidIt() {
-        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
         when(courtBlockRepository.save(any(CourtBlock.class))).thenReturn(courtBlock());
 
         CourtBlockResponse response = courtBlockService.createCourtBlock(CURRENT_USER, COURT_ID, request(STARTS_AT, ENDS_AT));
@@ -84,33 +102,95 @@ class CourtBlockServiceTest {
 
     @Test
     void shouldThrowCourtNotFoundWhenBlockingCourtOfAnotherClub() {
-        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(false);
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> courtBlockService.createCourtBlock(CURRENT_USER, COURT_ID, request(STARTS_AT, ENDS_AT)))
                 .isInstanceOf(CourtNotFoundException.class);
+
+        verify(courtBlockRepository, never()).save(any());
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    void shouldCancelTheReservationsTheBlockOverlapsInTheSameOperation() {
+        CreateCourtBlockRequest request = new CreateCourtBlockRequest(STARTS_AT, ENDS_AT, REASON, List.of(45L, 46L));
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
+        when(courtBlockRepository.save(any(CourtBlock.class))).thenReturn(courtBlock());
+
+        courtBlockService.createCourtBlock(CURRENT_USER, COURT_ID, request);
+
+        verify(reservationService).cancelReservationsAffectedByBlock(CURRENT_USER, COURT_ID, request);
+    }
+
+    @Test
+    void shouldNotCreateTheBlockWhenItWouldCancelUnseenReservations() {
+        CreateCourtBlockRequest request = request(STARTS_AT, ENDS_AT);
+        CourtBlockAffectsUnseenReservationsException unseen = new CourtBlockAffectsUnseenReservationsException(
+                List.of("reservation 52 on 2026-08-04 18:00-19:00"));
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
+        when(reservationService.cancelReservationsAffectedByBlock(CURRENT_USER, COURT_ID, request)).thenThrow(unseen);
+
+        assertThatThrownBy(() -> courtBlockService.createCourtBlock(CURRENT_USER, COURT_ID, request))
+                .isInstanceOf(CourtBlockAffectsUnseenReservationsException.class);
 
         verify(courtBlockRepository, never()).save(any());
     }
 
     @Test
     void shouldRejectBlockThatEndsBeforeItStarts() {
-        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
 
         assertThatThrownBy(() -> courtBlockService.createCourtBlock(CURRENT_USER, COURT_ID, request(ENDS_AT, STARTS_AT)))
                 .isInstanceOf(InvalidDateRangeException.class)
                 .hasMessage("endsAt 2026-08-03T08:00 must be after startsAt 2026-08-05T23:59");
 
         verify(courtBlockRepository, never()).save(any());
+        verifyNoInteractions(reservationService);
     }
 
     @Test
     void shouldRejectBlockThatEndsWhenItStarts() {
-        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
 
         assertThatThrownBy(() -> courtBlockService.createCourtBlock(CURRENT_USER, COURT_ID, request(STARTS_AT, STARTS_AT)))
                 .isInstanceOf(InvalidDateRangeException.class);
 
         verify(courtBlockRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldListTheReservationsTheBlockWouldCancel() {
+        ReservationResponse affected = new ReservationResponse(45L, COURT_ID, 10L, null, null, null, null, null, null, null, null, null,
+                null, null);
+        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        when(reservationService.listReservationsAffectedByBlock(COURT_ID, STARTS_AT, ENDS_AT)).thenReturn(List.of(affected));
+
+        List<ReservationResponse> response = courtBlockService.listAffectedReservations(CLUB_ID, COURT_ID,
+                new AffectedReservationsSearchRequest(STARTS_AT, ENDS_AT));
+
+        assertThat(response).containsExactly(affected);
+    }
+
+    @Test
+    void shouldThrowCourtNotFoundWhenPreviewingABlockOfAnotherClub() {
+        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(false);
+        AffectedReservationsSearchRequest filter = new AffectedReservationsSearchRequest(STARTS_AT, ENDS_AT);
+
+        assertThatThrownBy(() -> courtBlockService.listAffectedReservations(CLUB_ID, COURT_ID, filter))
+                .isInstanceOf(CourtNotFoundException.class);
+
+        verifyNoInteractions(reservationService);
+    }
+
+    @Test
+    void shouldRejectPreviewingABlockThatDoesNotEndAfterItStarts() {
+        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        AffectedReservationsSearchRequest filter = new AffectedReservationsSearchRequest(ENDS_AT, STARTS_AT);
+
+        assertThatThrownBy(() -> courtBlockService.listAffectedReservations(CLUB_ID, COURT_ID, filter))
+                .isInstanceOf(InvalidDateRangeException.class);
+
+        verifyNoInteractions(reservationService);
     }
 
     @Test
@@ -181,7 +261,11 @@ class CourtBlockServiceTest {
     }
 
     private CreateCourtBlockRequest request(LocalDateTime startsAt, LocalDateTime endsAt) {
-        return new CreateCourtBlockRequest(startsAt, endsAt, REASON);
+        return new CreateCourtBlockRequest(startsAt, endsAt, REASON, null);
+    }
+
+    private Court court() {
+        return Court.builder().id(COURT_ID).clubId(CLUB_ID).active(true).build();
     }
 
     private CourtBlock courtBlock() {

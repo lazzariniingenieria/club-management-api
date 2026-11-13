@@ -17,7 +17,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     List<Reservation> findByCourtIdAndStatusAndDateGreaterThanEqualOrderByDateAscStartTimeAsc(Long courtId, ReservationStatus status,
             LocalDate date);
 
-    List<Reservation> findByCourtIdAndStatusAndDateBetween(Long courtId, ReservationStatus status, LocalDate from, LocalDate to);
+    List<Reservation> findByCourtIdAndStatusAndDateBetweenOrderByDateAscStartTimeAsc(Long courtId, ReservationStatus status,
+            LocalDate from, LocalDate to);
 
     List<Reservation> findByMemberIdAndStatusAndDateGreaterThanEqual(Long memberId, ReservationStatus status, LocalDate date);
 
