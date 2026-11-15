@@ -6,6 +6,7 @@ import com.lazzariniingenieria.clubmanagementapi.dto.UpdateMemberRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateMemberNameException;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.MemberMapper;
@@ -36,6 +37,8 @@ public class MemberService {
         if (dniInUse) {
             throw new DuplicateDniException(dni);
         }
+
+        validateFullNameAvailable(clubId, request.firstName(), request.lastName());
 
         if (request.familyGroupId() != null) {
             validateFamilyGroupExists(clubId, request.familyGroupId());
@@ -84,6 +87,10 @@ public class MemberService {
 
         if (dniTakenByAnotherMember) {
             throw new DuplicateDniException(dni);
+        }
+
+        if (!hasSameFullName(member, request)) {
+            validateFullNameAvailable(clubId, request.firstName(), request.lastName());
         }
 
         member.setFirstName(request.firstName());
@@ -155,6 +162,21 @@ public class MemberService {
         if (!familyGroupExists) {
             throw new FamilyGroupNotFoundException(familyGroupId);
         }
+    }
+
+    private void validateFullNameAvailable(Long clubId, String firstName, String lastName) {
+        boolean fullNameInUse = memberRepository.existsByClubIdAndFirstNameIgnoreCaseAndLastNameIgnoreCase(clubId, firstName, lastName);
+
+        if (fullNameInUse) {
+            throw new DuplicateMemberNameException(firstName, lastName);
+        }
+    }
+
+    private boolean hasSameFullName(Member member, UpdateMemberRequest request) {
+        boolean sameFirstName = member.getFirstName().equalsIgnoreCase(request.firstName());
+        boolean sameLastName = member.getLastName().equalsIgnoreCase(request.lastName());
+
+        return sameFirstName && sameLastName;
     }
 
     private String dniOrNullWhenBlank(String dni) {

@@ -19,6 +19,7 @@ import com.lazzariniingenieria.clubmanagementapi.dto.UpdateMemberRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateMemberNameException;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
@@ -101,6 +102,20 @@ class MemberControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void shouldReturnConflictWhenCreatingMemberWithDuplicateName() throws Exception {
+        String requestBody = readFixture("create-member-request-valid.json");
+        when(memberService.createMember(any(AuthenticatedUser.class), any(CreateMemberRequest.class)))
+                .thenThrow(new DuplicateMemberNameException("Marcos", "Gomez"));
+
+        mockMvc.perform(post("/api/members")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", is("a member named Marcos Gomez already exists in this club")));
     }
 
     @Test

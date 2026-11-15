@@ -125,6 +125,19 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnConflictWithExceptionMessageWhenMemberNameIsDuplicated() {
+        DuplicateMemberNameException exception = new DuplicateMemberNameException("Marcos", "Gomez");
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleDuplicateMemberName(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.status()).isEqualTo(409);
+        assertThat(body.message()).isEqualTo("a member named Marcos Gomez already exists in this club");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
     void shouldReturnNotFoundWithExceptionMessageWhenAdminDoesNotExist() {
         AdminNotFoundException exception = new AdminNotFoundException(42L);
 

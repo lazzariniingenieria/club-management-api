@@ -14,6 +14,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateMemberNameException;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.MemberMapper;
@@ -94,6 +95,27 @@ class MemberServiceTest {
         when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(true);
 
         assertThatThrownBy(() -> memberService.createMember(CURRENT_USER, request)).isInstanceOf(DuplicateDniException.class);
+
+        verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrowDuplicateMemberNameWhenCreatingWithFullNameAlreadyUsedInClub() {
+        CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", null, null, null, null);
+        when(memberRepository.existsByClubIdAndFirstNameIgnoreCaseAndLastNameIgnoreCase(CLUB_ID, "Marcos", "Gomez")).thenReturn(true);
+
+        assertThatThrownBy(() -> memberService.createMember(CURRENT_USER, request)).isInstanceOf(DuplicateMemberNameException.class);
+
+        verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrowDuplicateMemberNameWhenCreatingWithNewDniButFullNameAlreadyUsedInClub() {
+        CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", DNI, null, null, null);
+        when(memberRepository.existsByClubIdAndDni(CLUB_ID, DNI)).thenReturn(false);
+        when(memberRepository.existsByClubIdAndFirstNameIgnoreCaseAndLastNameIgnoreCase(CLUB_ID, "Marcos", "Gomez")).thenReturn(true);
+
+        assertThatThrownBy(() -> memberService.createMember(CURRENT_USER, request)).isInstanceOf(DuplicateMemberNameException.class);
 
         verify(memberRepository, never()).save(any());
     }
@@ -239,6 +261,44 @@ class MemberServiceTest {
                 .isInstanceOf(DuplicateDniException.class);
 
         verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldThrowDuplicateMemberNameWhenUpdatingToFullNameUsedByAnotherMember() {
+        Member existingMember = member();
+        UpdateMemberRequest request = new UpdateMemberRequest("Laura", "Gomez", DNI, null, null);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.existsByClubIdAndFirstNameIgnoreCaseAndLastNameIgnoreCase(CLUB_ID, "Laura", "Gomez")).thenReturn(true);
+
+        assertThatThrownBy(() -> memberService.updateMember(CURRENT_USER, MEMBER_ID, request))
+                .isInstanceOf(DuplicateMemberNameException.class);
+
+        verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldUpdateMemberWhenNewFullNameIsNotUsedInClub() {
+        Member existingMember = member();
+        UpdateMemberRequest request = new UpdateMemberRequest("Laura", "Gomez", DNI, null, null);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.existsByClubIdAndFirstNameIgnoreCaseAndLastNameIgnoreCase(CLUB_ID, "Laura", "Gomez")).thenReturn(false);
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        MemberResponse response = memberService.updateMember(CURRENT_USER, MEMBER_ID, request);
+
+        assertThat(response.firstName()).isEqualTo("Laura");
+    }
+
+    @Test
+    void shouldNotCheckFullNameUniquenessWhenUpdatingMemberThatOnlyChangesNameLetterCase() {
+        Member existingMember = member();
+        UpdateMemberRequest request = new UpdateMemberRequest("MARCOS", "gomez", DNI, null, null);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        memberService.updateMember(CURRENT_USER, MEMBER_ID, request);
+
+        verify(memberRepository, never()).existsByClubIdAndFirstNameIgnoreCaseAndLastNameIgnoreCase(any(), any(), any());
     }
 
     @Test
