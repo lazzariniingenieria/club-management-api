@@ -99,6 +99,44 @@ class MemberServiceTest {
     }
 
     @Test
+    void shouldCreateMemberWithoutDniWhenDniIsNotProvided() {
+        CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", null, null, null, null);
+        when(memberRepository.save(any(Member.class))).thenReturn(member());
+
+        memberService.createMember(CURRENT_USER, request);
+
+        ArgumentCaptor<Member> savedMemberCaptor = ArgumentCaptor.forClass(Member.class);
+        verify(memberRepository).save(savedMemberCaptor.capture());
+        Member savedMember = savedMemberCaptor.getValue();
+
+        assertThat(savedMember.getDni()).isNull();
+    }
+
+    @Test
+    void shouldNotCheckDniUniquenessWhenCreatingMemberWithoutDni() {
+        CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", null, null, null, null);
+        when(memberRepository.save(any(Member.class))).thenReturn(member());
+
+        memberService.createMember(CURRENT_USER, request);
+
+        verify(memberRepository, never()).existsByClubIdAndDni(any(), any());
+    }
+
+    @Test
+    void shouldStoreNullDniWhenCreatingMemberWithBlankDni() {
+        CreateMemberRequest request = new CreateMemberRequest("Marcos", "Gomez", "  ", null, null, null);
+        when(memberRepository.save(any(Member.class))).thenReturn(member());
+
+        memberService.createMember(CURRENT_USER, request);
+
+        ArgumentCaptor<Member> savedMemberCaptor = ArgumentCaptor.forClass(Member.class);
+        verify(memberRepository).save(savedMemberCaptor.capture());
+        Member savedMember = savedMemberCaptor.getValue();
+
+        assertThat(savedMember.getDni()).isNull();
+    }
+
+    @Test
     void shouldCreateMemberWithFamilyGroupWhenProvidedAndItExistsInClub() {
         CreateMemberRequest request =
                 new CreateMemberRequest("Marcos", "Gomez", DNI, "+54 11 4444-5555", "marcos@example.com", 2L);
@@ -201,6 +239,42 @@ class MemberServiceTest {
                 .isInstanceOf(DuplicateDniException.class);
 
         verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldClearDniWhenUpdatingMemberWithoutDni() {
+        Member existingMember = member();
+        UpdateMemberRequest request = new UpdateMemberRequest("Marcos", "Gomez", null, null, null);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        MemberResponse response = memberService.updateMember(CURRENT_USER, MEMBER_ID, request);
+
+        assertThat(response.dni()).isNull();
+    }
+
+    @Test
+    void shouldNotCheckDniUniquenessWhenUpdatingMemberWithoutDni() {
+        Member existingMember = member();
+        UpdateMemberRequest request = new UpdateMemberRequest("Marcos", "Gomez", null, null, null);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        memberService.updateMember(CURRENT_USER, MEMBER_ID, request);
+
+        verify(memberRepository, never()).existsByClubIdAndDniAndIdNot(any(), any(), any());
+    }
+
+    @Test
+    void shouldStoreNullDniWhenUpdatingMemberWithBlankDni() {
+        Member existingMember = member();
+        UpdateMemberRequest request = new UpdateMemberRequest("Marcos", "Gomez", "", null, null);
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        MemberResponse response = memberService.updateMember(CURRENT_USER, MEMBER_ID, request);
+
+        assertThat(response.dni()).isNull();
     }
 
     @Test

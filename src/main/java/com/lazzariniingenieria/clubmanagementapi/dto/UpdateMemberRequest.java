@@ -14,7 +14,6 @@ public record UpdateMemberRequest(@NotBlank(message = "firstName is required")
                                    @Size(max = 100, message = "lastName must be at most 100 characters")
                                    String lastName,
 
-                                   @NotBlank(message = "dni is required")
                                    @Size(max = 20, message = "dni must be at most 20 characters")
                                    String dni,
 

@@ -30,10 +30,11 @@ public class MemberService {
 
     public MemberResponse createMember(AuthenticatedUser currentUser, CreateMemberRequest request) {
         Long clubId = currentUser.clubId();
-        boolean dniInUse = memberRepository.existsByClubIdAndDni(clubId, request.dni());
+        String dni = dniOrNullWhenBlank(request.dni());
+        boolean dniInUse = dni != null && memberRepository.existsByClubIdAndDni(clubId, dni);
 
         if (dniInUse) {
-            throw new DuplicateDniException(request.dni());
+            throw new DuplicateDniException(dni);
         }
 
         if (request.familyGroupId() != null) {
@@ -45,7 +46,7 @@ public class MemberService {
                 .clubId(clubId)
                 .firstName(request.firstName())
                 .lastName(request.lastName())
-                .dni(request.dni())
+                .dni(dni)
                 .phone(request.phone())
                 .email(request.email())
                 .familyGroupId(request.familyGroupId())
@@ -78,15 +79,16 @@ public class MemberService {
     public MemberResponse updateMember(AuthenticatedUser currentUser, Long memberId, UpdateMemberRequest request) {
         Long clubId = currentUser.clubId();
         Member member = findMemberOrThrow(clubId, memberId);
-        boolean dniTakenByAnotherMember = memberRepository.existsByClubIdAndDniAndIdNot(clubId, request.dni(), memberId);
+        String dni = dniOrNullWhenBlank(request.dni());
+        boolean dniTakenByAnotherMember = dni != null && memberRepository.existsByClubIdAndDniAndIdNot(clubId, dni, memberId);
 
         if (dniTakenByAnotherMember) {
-            throw new DuplicateDniException(request.dni());
+            throw new DuplicateDniException(dni);
         }
 
         member.setFirstName(request.firstName());
         member.setLastName(request.lastName());
-        member.setDni(request.dni());
+        member.setDni(dni);
         member.setPhone(request.phone());
         member.setEmail(request.email());
         markUpdated(member, currentUser.userAccountId());
@@ -153,6 +155,12 @@ public class MemberService {
         if (!familyGroupExists) {
             throw new FamilyGroupNotFoundException(familyGroupId);
         }
+    }
+
+    private String dniOrNullWhenBlank(String dni) {
+        boolean dniProvided = dni != null && !dni.isBlank();
+
+        return dniProvided ? dni : null;
     }
 
     private void markUpdated(Member member, Long actingUserId) {

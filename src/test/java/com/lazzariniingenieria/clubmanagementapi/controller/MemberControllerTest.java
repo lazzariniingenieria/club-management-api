@@ -144,14 +144,15 @@ class MemberControllerTest {
     }
 
     @Test
-    void shouldReturnBadRequestWhenDniIsBlank() throws Exception {
-        String requestBody = readFixture("create-member-request-blank-dni.json");
+    void shouldReturnCreatedWhenCreatingMemberWithoutDni() throws Exception {
+        String requestBody = readFixture("create-member-request-without-dni.json");
+        when(memberService.createMember(any(AuthenticatedUser.class), any(CreateMemberRequest.class))).thenReturn(memberResponse());
 
         mockMvc.perform(post("/api/members")
                         .with(asSuperAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isCreated());
     }
 
     @Test
@@ -228,14 +229,16 @@ class MemberControllerTest {
     }
 
     @Test
-    void shouldReturnBadRequestWhenUpdatingWithBlankDni() throws Exception {
-        String requestBody = readFixture("update-member-request-blank-dni.json");
+    void shouldUpdateMemberWhenDniIsNotProvided() throws Exception {
+        String requestBody = readFixture("update-member-request-without-dni.json");
+        when(memberService.updateMember(any(AuthenticatedUser.class), eq(MEMBER_ID), any(UpdateMemberRequest.class)))
+                .thenReturn(memberResponse());
 
         mockMvc.perform(patch("/api/members/{memberId}", MEMBER_ID)
                         .with(asSuperAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
     }
 
     @Test
