@@ -1,0 +1,2 @@
+ALTER TABLE member
+    ALTER COLUMN dni DROP NOT NULL;

@@ -50,6 +50,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(DuplicateMemberNameException.class)
+    public ResponseEntity<ApiErrorDto> handleDuplicateMemberName(DuplicateMemberNameException exception) {
+        log.warn("Rejected request due to duplicate member name: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(AdminNotFoundException.class)
     public ResponseEntity<ApiErrorDto> handleAdminNotFound(AdminNotFoundException exception) {
         log.warn("Admin lookup failed: {}", exception.getMessage());

@@ -19,6 +19,7 @@ import com.lazzariniingenieria.clubmanagementapi.dto.UpdateMemberRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateMemberNameException;
 import com.lazzariniingenieria.clubmanagementapi.exception.FamilyGroupNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
@@ -104,6 +105,20 @@ class MemberControllerTest {
     }
 
     @Test
+    void shouldReturnConflictWhenCreatingMemberWithDuplicateName() throws Exception {
+        String requestBody = readFixture("create-member-request-valid.json");
+        when(memberService.createMember(any(AuthenticatedUser.class), any(CreateMemberRequest.class)))
+                .thenThrow(new DuplicateMemberNameException("Marcos", "Gomez"));
+
+        mockMvc.perform(post("/api/members")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", is("a member named Marcos Gomez already exists in this club")));
+    }
+
+    @Test
     void shouldReturnCreatedMemberWithFamilyGroupWhenValid() throws Exception {
         String requestBody = readFixture("create-member-request-with-family-group.json");
         MemberResponse response = new MemberResponse(MEMBER_ID, "Marcos", "Gomez", "30111222", "+54 11 4444-5555",
@@ -144,14 +159,15 @@ class MemberControllerTest {
     }
 
     @Test
-    void shouldReturnBadRequestWhenDniIsBlank() throws Exception {
-        String requestBody = readFixture("create-member-request-blank-dni.json");
+    void shouldReturnCreatedWhenCreatingMemberWithoutDni() throws Exception {
+        String requestBody = readFixture("create-member-request-without-dni.json");
+        when(memberService.createMember(any(AuthenticatedUser.class), any(CreateMemberRequest.class))).thenReturn(memberResponse());
 
         mockMvc.perform(post("/api/members")
                         .with(asSuperAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isCreated());
     }
 
     @Test
@@ -228,14 +244,16 @@ class MemberControllerTest {
     }
 
     @Test
-    void shouldReturnBadRequestWhenUpdatingWithBlankDni() throws Exception {
-        String requestBody = readFixture("update-member-request-blank-dni.json");
+    void shouldUpdateMemberWhenDniIsNotProvided() throws Exception {
+        String requestBody = readFixture("update-member-request-without-dni.json");
+        when(memberService.updateMember(any(AuthenticatedUser.class), eq(MEMBER_ID), any(UpdateMemberRequest.class)))
+                .thenReturn(memberResponse());
 
         mockMvc.perform(patch("/api/members/{memberId}", MEMBER_ID)
                         .with(asSuperAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
     }
 
     @Test
