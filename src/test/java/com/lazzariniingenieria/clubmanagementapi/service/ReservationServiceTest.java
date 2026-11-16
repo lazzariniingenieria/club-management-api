@@ -163,7 +163,7 @@ class ReservationServiceTest {
     @Test
     void shouldThrowMemberNotFoundWhenMemberIsOfAnotherClub() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.createReservation(CURRENT_USER, request("22:00", "23:00")))
                 .isInstanceOf(MemberNotFoundException.class);
@@ -172,7 +172,7 @@ class ReservationServiceTest {
     @Test
     void shouldRejectReservationForAnInactiveMember() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.INACTIVE)));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.INACTIVE)));
 
         assertThatThrownBy(() -> reservationService.createReservation(CURRENT_USER, request("22:00", "23:00")))
                 .isInstanceOf(InvalidReservationException.class)
@@ -521,7 +521,7 @@ class ReservationServiceTest {
 
     private void stubClubCourtAndMember() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
     }
 
     private void stubClubAndCourt() {

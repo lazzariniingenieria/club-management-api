@@ -45,8 +45,8 @@ public class CourtBookingRules {
         return court;
     }
 
-    public void validateMemberIsActive(Long clubId, Long memberId) {
-        Member member = memberRepository.findByIdAndClubId(memberId, clubId).orElseThrow(() -> new MemberNotFoundException(memberId));
+    public void lockActiveMember(Long clubId, Long memberId) {
+        Member member = memberRepository.findByIdAndClubIdForUpdate(memberId, clubId).orElseThrow(() -> new MemberNotFoundException(memberId));
 
         if (member.getStatus() != MemberStatus.ACTIVE) {
             throw new InvalidReservationException("member " + memberId + " is not active");

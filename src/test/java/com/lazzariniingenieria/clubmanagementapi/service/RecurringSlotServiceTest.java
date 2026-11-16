@@ -313,7 +313,7 @@ class RecurringSlotServiceTest {
     @Test
     void shouldRejectASlotForAnInactiveMember() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.INACTIVE)));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.INACTIVE)));
 
         assertThatThrownBy(() -> recurringSlotService.createRecurringSlot(CURRENT_USER, memberRequest(NEXT_TUESDAY, FOURTH_TUESDAY)))
                 .isInstanceOf(InvalidReservationException.class)
@@ -323,7 +323,7 @@ class RecurringSlotServiceTest {
     @Test
     void shouldThrowMemberNotFoundWhenTheMemberIsOfAnotherClub() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recurringSlotService.createRecurringSlot(CURRENT_USER, memberRequest(NEXT_TUESDAY, FOURTH_TUESDAY)))
                 .isInstanceOf(MemberNotFoundException.class);
@@ -495,7 +495,7 @@ class RecurringSlotServiceTest {
         stubExistingSlot(original);
         when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club(true)));
         when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
         when(recurringSlotRepository.save(any(RecurringSlot.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), 31L));
 
         RecurringSlotResponse response = recurringSlotService.renewRecurringSlot(CURRENT_USER, RECURRING_SLOT_ID,
@@ -551,7 +551,7 @@ class RecurringSlotServiceTest {
 
     private void stubClubCourtAndMember() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
     }
 
     private void stubClubAndCourt() {

@@ -155,7 +155,7 @@ public class RecurringSlotService {
         }
 
         if (hasMember) {
-            courtBookingRules.validateMemberIsActive(clubId, memberId);
+            courtBookingRules.lockActiveMember(clubId, memberId);
         }
     }
 

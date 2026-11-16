@@ -55,7 +55,7 @@ public class ReservationService {
         Long clubId = currentUser.clubId();
         courtBookingRules.validateCourtsEnabled(clubId);
         Court court = courtBookingRules.lockActiveCourtOrThrow(clubId, request.courtId());
-        courtBookingRules.validateMemberIsActive(clubId, request.memberId());
+        courtBookingRules.lockActiveMember(clubId, request.memberId());
         courtBookingRules.validateFitsCourtHours(court, request.startTime(), request.endTime());
         validateStartsInTheFuture(request);
         validateCourtIsNotBlocked(court.getId(), request);

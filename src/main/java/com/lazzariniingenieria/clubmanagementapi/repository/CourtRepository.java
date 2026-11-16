@@ -1,8 +1,8 @@
 package com.lazzariniingenieria.clubmanagementapi.repository;
 
 import com.lazzariniingenieria.clubmanagementapi.entity.Court;
-import java.util.List;
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
