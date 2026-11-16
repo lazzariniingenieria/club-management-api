@@ -103,7 +103,7 @@ public class MemberService {
     @Transactional
     public MemberResponse deactivateMember(AuthenticatedUser currentUser, Long memberId) {
         Long clubId = currentUser.clubId();
-        Member member = findMemberOrThrow(clubId, memberId);
+        Member member = lockMemberOrThrow(clubId, memberId);
         member.setStatus(MemberStatus.INACTIVE);
         markUpdated(member, currentUser.userAccountId());
 
@@ -171,5 +171,9 @@ public class MemberService {
         return memberRepository
                 .findByIdAndClubId(memberId, clubId)
                 .orElseThrow(() -> new MemberNotFoundException(memberId));
+    }
+
+    private Member lockMemberOrThrow(Long clubId, Long memberId) {
+        return memberRepository.findByIdAndClubIdForUpdate(memberId, clubId).orElseThrow(() -> new MemberNotFoundException(memberId));
     }
 }

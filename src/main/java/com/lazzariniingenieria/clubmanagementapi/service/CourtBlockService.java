@@ -1,8 +1,10 @@
 package com.lazzariniingenieria.clubmanagementapi.service;
 
+import com.lazzariniingenieria.clubmanagementapi.dto.AffectedReservationsSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CourtBlockResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CourtBlockSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateCourtBlockRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.entity.CourtBlock;
 import com.lazzariniingenieria.clubmanagementapi.exception.CourtBlockNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.CourtNotFoundException;
@@ -20,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -31,25 +34,27 @@ public class CourtBlockService {
     private final CourtBlockRepository courtBlockRepository;
     private final CourtRepository courtRepository;
     private final CourtBlockMapper courtBlockMapper;
+    private final CourtBookingRules courtBookingRules;
+    private final ReservationService reservationService;
 
+    @Transactional
     public CourtBlockResponse createCourtBlock(AuthenticatedUser currentUser, Long courtId, CreateCourtBlockRequest request) {
-        validateCourtExists(currentUser.clubId(), courtId);
+        courtBookingRules.lockCourtOrThrow(currentUser.clubId(), courtId);
         validateEndsAfterStarts(request.startsAt(), request.endsAt());
+        int cancelledReservations = reservationService.cancelReservationsAffectedByBlock(currentUser, courtId, request);
 
-        CourtBlock courtBlock = CourtBlock.builder()
-                .courtId(courtId)
-                .startsAt(request.startsAt())
-                .endsAt(request.endsAt())
-                .reason(request.reason())
-                .createdAt(Instant.now())
-                .createdByUserId(currentUser.userAccountId())
-                .build();
-
-        CourtBlock savedCourtBlock = courtBlockRepository.save(courtBlock);
-        log.info("Blocked courtId={} from {} to {} with courtBlockId={} in clubId={}", courtId, request.startsAt(),
-                request.endsAt(), savedCourtBlock.getId(), currentUser.clubId());
+        CourtBlock savedCourtBlock = courtBlockRepository.save(newCourtBlock(currentUser, courtId, request));
+        log.info("Blocked courtId={} from {} to {} with courtBlockId={} in clubId={}, cancelling {} reservation(s)", courtId,
+                request.startsAt(), request.endsAt(), savedCourtBlock.getId(), currentUser.clubId(), cancelledReservations);
 
         return courtBlockMapper.toResponse(savedCourtBlock);
+    }
+
+    public List<ReservationResponse> listAffectedReservations(Long clubId, Long courtId, AffectedReservationsSearchRequest filter) {
+        validateCourtExists(clubId, courtId);
+        validateEndsAfterStarts(filter.startsAt(), filter.endsAt());
+
+        return reservationService.listReservationsAffectedByBlock(courtId, filter.startsAt(), filter.endsAt());
     }
 
     public List<CourtBlockResponse> listCourtBlocks(Long clubId, Long courtId, CourtBlockSearchRequest filter) {
@@ -70,6 +75,17 @@ public class CourtBlockService {
         courtBlockRepository.delete(courtBlock);
         log.info("Removed courtBlockId={} from courtId={} in clubId={} by userAccountId={}", courtBlockId, courtId, currentUser.clubId(),
                 currentUser.userAccountId());
+    }
+
+    private CourtBlock newCourtBlock(AuthenticatedUser currentUser, Long courtId, CreateCourtBlockRequest request) {
+        return CourtBlock.builder()
+                .courtId(courtId)
+                .startsAt(request.startsAt())
+                .endsAt(request.endsAt())
+                .reason(request.reason())
+                .createdAt(Instant.now())
+                .createdByUserId(currentUser.userAccountId())
+                .build();
     }
 
     private void validateCourtExists(Long clubId, Long courtId) {

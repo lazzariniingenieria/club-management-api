@@ -80,7 +80,8 @@ public class CourtService {
 
     @Transactional
     public CourtResponse deactivateCourt(AuthenticatedUser currentUser, Long courtId) {
-        Court savedCourt = saveActive(currentUser, courtId, false);
+        Court court = lockCourtOrThrow(currentUser.clubId(), courtId);
+        Court savedCourt = saveActive(currentUser, court, false);
         int cancelledReservations = reservationService.cancelUpcomingReservationsOfCourt(currentUser, courtId);
         int deactivatedRecurringSlots = recurringSlotService.deactivateRecurringSlotsOfCourt(currentUser, courtId);
         log.info("Deactivated court courtId={} for clubId={}, cancelling {} upcoming reservation(s) and {} recurring slot(s)", courtId,
@@ -90,14 +91,14 @@ public class CourtService {
     }
 
     public CourtResponse reactivateCourt(AuthenticatedUser currentUser, Long courtId) {
-        Court savedCourt = saveActive(currentUser, courtId, true);
+        Court court = findCourtOrThrow(currentUser.clubId(), courtId);
+        Court savedCourt = saveActive(currentUser, court, true);
         log.info("Reactivated court courtId={} for clubId={}", courtId, currentUser.clubId());
 
         return courtMapper.toResponse(savedCourt);
     }
 
-    private Court saveActive(AuthenticatedUser currentUser, Long courtId, boolean active) {
-        Court court = findCourtOrThrow(currentUser.clubId(), courtId);
+    private Court saveActive(AuthenticatedUser currentUser, Court court, boolean active) {
         court.setActive(active);
         markUpdated(court, currentUser.userAccountId());
 
@@ -138,5 +139,9 @@ public class CourtService {
         return courtRepository
                 .findByIdAndClubId(courtId, clubId)
                 .orElseThrow(() -> new CourtNotFoundException(courtId));
+    }
+
+    private Court lockCourtOrThrow(Long clubId, Long courtId) {
+        return courtRepository.findByIdAndClubIdForUpdate(courtId, clubId).orElseThrow(() -> new CourtNotFoundException(courtId));
     }
 }

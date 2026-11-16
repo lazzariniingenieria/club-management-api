@@ -214,8 +214,8 @@ class RecurringSlotServiceTest {
     void shouldAcceptAReservationThatEndsWhenTheSlotStarts() {
         stubClubCourtAndMember();
         stubSaveSlot();
-        when(reservationRepository.findByCourtIdAndStatusAndDateBetween(COURT_ID, ReservationStatus.CONFIRMED, NEXT_TUESDAY,
-                FOURTH_TUESDAY)).thenReturn(List.of(reservationOn(NEXT_TUESDAY, "17:00", "18:00")));
+        when(reservationRepository.findByCourtIdAndStatusAndDateBetweenOrderByDateAscStartTimeAsc(COURT_ID, ReservationStatus.CONFIRMED,
+                NEXT_TUESDAY, FOURTH_TUESDAY)).thenReturn(List.of(reservationOn(NEXT_TUESDAY, "17:00", "18:00")));
 
         recurringSlotService.createRecurringSlot(CURRENT_USER, memberRequest(NEXT_TUESDAY, FOURTH_TUESDAY));
 
@@ -225,8 +225,8 @@ class RecurringSlotServiceTest {
     @Test
     void shouldRejectTheWholeSlotListingEveryConflictingDate() {
         stubClubCourtAndMember();
-        when(reservationRepository.findByCourtIdAndStatusAndDateBetween(COURT_ID, ReservationStatus.CONFIRMED, NEXT_TUESDAY,
-                FOURTH_TUESDAY)).thenReturn(List.of(reservationOn(LocalDate.parse("2026-11-17"), "18:30", "19:30")));
+        when(reservationRepository.findByCourtIdAndStatusAndDateBetweenOrderByDateAscStartTimeAsc(COURT_ID, ReservationStatus.CONFIRMED,
+                NEXT_TUESDAY, FOURTH_TUESDAY)).thenReturn(List.of(reservationOn(LocalDate.parse("2026-11-17"), "18:30", "19:30")));
         when(courtBlockRepository.findByCourtIdAndStartsAtLessThanAndEndsAtGreaterThan(COURT_ID, LocalDateTime.parse("2026-12-01T19:00"),
                 LocalDateTime.parse("2026-11-10T18:00"))).thenReturn(List.of(blockBetween("2026-11-23T08:00", "2026-11-25T23:00")));
 
@@ -265,7 +265,7 @@ class RecurringSlotServiceTest {
         Court inactiveCourt = court();
         inactiveCourt.setActive(false);
         when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club(true)));
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.of(inactiveCourt));
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(inactiveCourt));
 
         assertThatThrownBy(() -> recurringSlotService.createRecurringSlot(CURRENT_USER, memberRequest(NEXT_TUESDAY, FOURTH_TUESDAY)))
                 .isInstanceOf(InvalidReservationException.class)
@@ -313,7 +313,7 @@ class RecurringSlotServiceTest {
     @Test
     void shouldRejectASlotForAnInactiveMember() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.INACTIVE)));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.INACTIVE)));
 
         assertThatThrownBy(() -> recurringSlotService.createRecurringSlot(CURRENT_USER, memberRequest(NEXT_TUESDAY, FOURTH_TUESDAY)))
                 .isInstanceOf(InvalidReservationException.class)
@@ -323,7 +323,7 @@ class RecurringSlotServiceTest {
     @Test
     void shouldThrowMemberNotFoundWhenTheMemberIsOfAnotherClub() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recurringSlotService.createRecurringSlot(CURRENT_USER, memberRequest(NEXT_TUESDAY, FOURTH_TUESDAY)))
                 .isInstanceOf(MemberNotFoundException.class);
@@ -494,8 +494,8 @@ class RecurringSlotServiceTest {
         RecurringSlot original = slot(false);
         stubExistingSlot(original);
         when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club(true)));
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
         when(recurringSlotRepository.save(any(RecurringSlot.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), 31L));
 
         RecurringSlotResponse response = recurringSlotService.renewRecurringSlot(CURRENT_USER, RECURRING_SLOT_ID,
@@ -551,12 +551,12 @@ class RecurringSlotServiceTest {
 
     private void stubClubCourtAndMember() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
     }
 
     private void stubClubAndCourt() {
         when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club(true)));
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
     }
 
     private void stubSaveSlot() {

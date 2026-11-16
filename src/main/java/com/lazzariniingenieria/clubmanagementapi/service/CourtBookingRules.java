@@ -31,8 +31,12 @@ public class CourtBookingRules {
         }
     }
 
-    public Court findActiveCourtOrThrow(Long clubId, Long courtId) {
-        Court court = courtRepository.findByIdAndClubId(courtId, clubId).orElseThrow(() -> new CourtNotFoundException(courtId));
+    public Court lockCourtOrThrow(Long clubId, Long courtId) {
+        return courtRepository.findByIdAndClubIdForUpdate(courtId, clubId).orElseThrow(() -> new CourtNotFoundException(courtId));
+    }
+
+    public Court lockActiveCourtOrThrow(Long clubId, Long courtId) {
+        Court court = lockCourtOrThrow(clubId, courtId);
 
         if (!court.isActive()) {
             throw new InvalidReservationException("court " + courtId + " is not active");
@@ -41,8 +45,8 @@ public class CourtBookingRules {
         return court;
     }
 
-    public void validateMemberIsActive(Long clubId, Long memberId) {
-        Member member = memberRepository.findByIdAndClubId(memberId, clubId).orElseThrow(() -> new MemberNotFoundException(memberId));
+    public void lockActiveMember(Long clubId, Long memberId) {
+        Member member = memberRepository.findByIdAndClubIdForUpdate(memberId, clubId).orElseThrow(() -> new MemberNotFoundException(memberId));
 
         if (member.getStatus() != MemberStatus.ACTIVE) {
             throw new InvalidReservationException("member " + memberId + " is not active");

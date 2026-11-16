@@ -134,6 +134,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(CourtBlockAffectsUnseenReservationsException.class)
+    public ResponseEntity<ApiErrorDto> handleCourtBlockAffectsUnseenReservations(CourtBlockAffectsUnseenReservationsException exception) {
+        log.warn("Rejected court block that would cancel unseen reservations: {}", exception.getUnseenReservations());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), exception.getUnseenReservations());
+    }
+
     @ExceptionHandler(ReservationNotFoundException.class)
     public ResponseEntity<ApiErrorDto> handleReservationNotFound(ReservationNotFoundException exception) {
         log.warn("Reservation lookup failed: {}", exception.getMessage());
