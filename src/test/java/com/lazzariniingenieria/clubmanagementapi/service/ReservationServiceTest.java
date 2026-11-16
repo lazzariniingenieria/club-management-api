@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateCourtBlockRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateReservationRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ReservationCreatedResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Club;
@@ -33,7 +35,9 @@ import com.lazzariniingenieria.clubmanagementapi.mapper.ReservationMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.ClubRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtBlockRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.MemberLastPaidPeriod;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.PaymentRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.RecurringSlotRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.ReservationRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
@@ -65,6 +69,7 @@ class ReservationServiceTest {
     private static final LocalDateTime BLOCK_ENDS_AT = LocalDateTime.parse("2026-11-10T12:00");
     private static final Long ACTING_USER_ID = 2L;
     private static final LocalDate TODAY = LocalDate.parse("2026-11-09");
+    private static final LocalDate MEMBER_JOINED_AT = LocalDate.parse("2026-10-01");
     private static final Instant NOW = Instant.parse("2026-11-09T23:30:00Z");
     private static final Clock CLUB_CLOCK = Clock.fixed(NOW, ZoneId.of("America/Argentina/Buenos_Aires"));
     private static final AuthenticatedUser CURRENT_USER = new AuthenticatedUser(ACTING_USER_ID, CLUB_ID, UserRole.ADMIN, null);
@@ -87,6 +92,9 @@ class ReservationServiceTest {
     @Mock
     private RecurringSlotRepository recurringSlotRepository;
 
+    @Mock
+    private PaymentRepository paymentRepository;
+
     private final ReservationMapper reservationMapper = new ReservationMapperImpl();
 
     private ReservationService reservationService;
@@ -94,8 +102,9 @@ class ReservationServiceTest {
     @BeforeEach
     void setUp() {
         CourtBookingRules courtBookingRules = new CourtBookingRules(clubRepository, courtRepository, memberRepository);
+        MemberDelinquencyCalculator memberDelinquencyCalculator = new MemberDelinquencyCalculator(paymentRepository, CLUB_CLOCK);
         reservationService = new ReservationService(reservationRepository, courtRepository, courtBlockRepository, recurringSlotRepository,
-                courtBookingRules, reservationMapper, CLUB_CLOCK);
+                courtBookingRules, reservationMapper, memberDelinquencyCalculator, CLUB_CLOCK);
     }
 
     @Test
@@ -103,7 +112,7 @@ class ReservationServiceTest {
         stubClubCourtAndMember();
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
 
-        ReservationResponse response = reservationService.createReservation(CURRENT_USER, request("22:00", "23:00"));
+        ReservationCreatedResponse response = reservationService.createReservation(CURRENT_USER, request("22:00", "23:00"));
 
         ArgumentCaptor<Reservation> savedCaptor = ArgumentCaptor.forClass(Reservation.class);
         verify(reservationRepository).save(savedCaptor.capture());
@@ -115,7 +124,7 @@ class ReservationServiceTest {
         assertThat(saved.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
         assertThat(saved.getCreatedAt()).isEqualTo(NOW);
         assertThat(saved.getCreatedByUserId()).isEqualTo(ACTING_USER_ID);
-        assertThat(response.id()).isEqualTo(RESERVATION_ID);
+        assertThat(response.reservation().id()).isEqualTo(RESERVATION_ID);
     }
 
     @Test
@@ -123,9 +132,42 @@ class ReservationServiceTest {
         stubClubCourtAndMember();
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
 
-        ReservationResponse response = reservationService.createReservation(CURRENT_USER, request("21:00", "22:00"));
+        ReservationCreatedResponse response = reservationService.createReservation(CURRENT_USER, request("21:00", "22:00"));
 
-        assertThat(response.startTime()).isEqualTo(LocalTime.of(21, 0));
+        assertThat(response.reservation().startTime()).isEqualTo(LocalTime.of(21, 0));
+    }
+
+    @Test
+    void shouldReserveForADelinquentMemberAndReportHowManyDaysTheyAreOverdue() {
+        stubClubCourtAndMember();
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+
+        ReservationCreatedResponse response = reservationService.createReservation(CURRENT_USER, request("22:00", "23:00"));
+
+        assertThat(response.reservation().status()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(response.memberDaysOverdue()).isEqualTo(39);
+    }
+
+    @Test
+    void shouldReportZeroDaysOverdueWhenTheMemberIsUpToDate() {
+        stubClubCourtAndMember();
+        MemberLastPaidPeriod currentMonthPaid = lastPaidPeriod(TODAY.withDayOfMonth(1));
+        when(paymentRepository.findLastPaidPeriodByMemberIds(List.of(MEMBER_ID))).thenReturn(List.of(currentMonthPaid));
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+
+        ReservationCreatedResponse response = reservationService.createReservation(CURRENT_USER, request("22:00", "23:00"));
+
+        assertThat(response.memberDaysOverdue()).isZero();
+    }
+
+    @Test
+    void shouldNotLookUpPaymentsWhenTheReservationIsRejected() {
+        stubClubCourtAndMember();
+
+        assertThatThrownBy(() -> reservationService.createReservation(CURRENT_USER, request("18:00", "19:00")))
+                .isInstanceOf(InvalidReservationException.class);
+
+        verifyNoInteractions(paymentRepository);
     }
 
     @Test
@@ -248,9 +290,9 @@ class ReservationServiceTest {
                 .thenReturn(List.of(reservation("21:00", "22:00")));
         when(reservationRepository.save(any(Reservation.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
 
-        ReservationResponse response = reservationService.createReservation(CURRENT_USER, request("22:00", "23:00"));
+        ReservationCreatedResponse response = reservationService.createReservation(CURRENT_USER, request("22:00", "23:00"));
 
-        assertThat(response.startTime()).isEqualTo(LocalTime.of(22, 0));
+        assertThat(response.reservation().startTime()).isEqualTo(LocalTime.of(22, 0));
     }
 
     @Test
@@ -557,7 +599,7 @@ class ReservationServiceTest {
     }
 
     private Member member(MemberStatus status) {
-        return Member.builder().id(MEMBER_ID).clubId(CLUB_ID).status(status).build();
+        return Member.builder().id(MEMBER_ID).clubId(CLUB_ID).status(status).joinedAt(MEMBER_JOINED_AT).build();
     }
 
     private Reservation reservation(String startTime, String endTime) {
@@ -578,5 +620,18 @@ class ReservationServiceTest {
         reservation.setId(RESERVATION_ID);
 
         return reservation;
+    }
+    private MemberLastPaidPeriod lastPaidPeriod(LocalDate lastPeriodCovered) {
+        return new MemberLastPaidPeriod() {
+            @Override
+            public Long getMemberId() {
+                return MEMBER_ID;
+            }
+
+            @Override
+            public LocalDate getLastPeriodCovered() {
+                return lastPeriodCovered;
+            }
+        };
     }
 }

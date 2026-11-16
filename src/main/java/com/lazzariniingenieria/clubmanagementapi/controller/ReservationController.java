@@ -1,6 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateReservationRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ReservationCreatedResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
@@ -28,9 +29,9 @@ public class ReservationController {
     private final ReservationService reservationService;
 
     @PostMapping
-    public ResponseEntity<ReservationResponse> create(@AuthenticationPrincipal AuthenticatedUser currentUser,
-                                                      @Valid @RequestBody CreateReservationRequest request) {
-        ReservationResponse response = reservationService.createReservation(currentUser, request);
+    public ResponseEntity<ReservationCreatedResponse> create(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                             @Valid @RequestBody CreateReservationRequest request) {
+        ReservationCreatedResponse response = reservationService.createReservation(currentUser, request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
