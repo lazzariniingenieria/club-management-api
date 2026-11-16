@@ -162,6 +162,27 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(RecurringSlotNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handleRecurringSlotNotFound(RecurringSlotNotFoundException exception) {
+        log.warn("Recurring slot lookup failed: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(RecurringSlotConflictException.class)
+    public ResponseEntity<ApiErrorDto> handleRecurringSlotConflict(RecurringSlotConflictException exception) {
+        log.warn("Rejected recurring slot with conflicting dates: {}", exception.getConflicts());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), exception.getConflicts());
+    }
+
+    @ExceptionHandler(RecurringSlotAlreadyInactiveException.class)
+    public ResponseEntity<ApiErrorDto> handleRecurringSlotAlreadyInactive(RecurringSlotAlreadyInactiveException exception) {
+        log.warn("Rejected deactivation of an already inactive recurring slot: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(DuplicateCourtNameException.class)
     public ResponseEntity<ApiErrorDto> handleDuplicateCourtName(DuplicateCourtNameException exception) {
         log.warn("Rejected request due to duplicate court name: {}", exception.getMessage());

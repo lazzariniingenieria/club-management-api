@@ -41,6 +41,9 @@ public class Reservation {
     @Column(name = "source", nullable = false, length = 20)
     private ReservationSource source;
 
+    @Column(name = "recurring_slot_id", updatable = false)
+    private Long recurringSlotId;
+
     @Column(name = "date", nullable = false)
     private LocalDate date;
 

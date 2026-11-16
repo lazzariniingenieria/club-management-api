@@ -26,6 +26,7 @@ public class CourtService {
     private final CourtRepository courtRepository;
     private final CourtMapper courtMapper;
     private final ReservationService reservationService;
+    private final RecurringSlotService recurringSlotService;
 
     public CourtResponse createCourt(AuthenticatedUser currentUser, CreateCourtRequest request) {
         Long clubId = currentUser.clubId();
@@ -80,9 +81,10 @@ public class CourtService {
     @Transactional
     public CourtResponse deactivateCourt(AuthenticatedUser currentUser, Long courtId) {
         Court savedCourt = saveActive(currentUser, courtId, false);
-        int cancelledReservations = reservationService.cancelUpcomingReservations(currentUser, courtId);
-        log.info("Deactivated court courtId={} for clubId={}, cancelling {} upcoming reservation(s)", courtId, currentUser.clubId(),
-                cancelledReservations);
+        int cancelledReservations = reservationService.cancelUpcomingReservationsOfCourt(currentUser, courtId);
+        int deactivatedRecurringSlots = recurringSlotService.deactivateRecurringSlotsOfCourt(currentUser, courtId);
+        log.info("Deactivated court courtId={} for clubId={}, cancelling {} upcoming reservation(s) and {} recurring slot(s)", courtId,
+                currentUser.clubId(), cancelledReservations, deactivatedRecurringSlots);
 
         return courtMapper.toResponse(savedCourt);
     }
