@@ -3,6 +3,7 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -50,13 +52,16 @@ class CourtServiceTest {
     @Mock
     private ReservationService reservationService;
 
+    @Mock
+    private RecurringSlotService recurringSlotService;
+
     private final CourtMapper courtMapper = new CourtMapperImpl();
 
     private CourtService courtService;
 
     @BeforeEach
     void setUp() {
-        courtService = new CourtService(courtRepository, courtMapper, reservationService);
+        courtService = new CourtService(courtRepository, courtMapper, reservationService, recurringSlotService);
     }
 
     @Test
@@ -194,7 +199,7 @@ class CourtServiceTest {
     @Test
     void shouldDeactivateCourtWhenFound() {
         Court existingCourt = court(PREVIOUS_ACTOR_ID);
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.of(existingCourt));
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(existingCourt));
         when(courtRepository.save(existingCourt)).thenReturn(existingCourt);
 
         CourtResponse response = courtService.deactivateCourt(CURRENT_USER, COURT_ID);
@@ -208,7 +213,7 @@ class CourtServiceTest {
 
     @Test
     void shouldThrowCourtNotFoundWhenDeactivatingMissingCourt() {
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.empty());
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> courtService.deactivateCourt(CURRENT_USER, COURT_ID)).isInstanceOf(CourtNotFoundException.class);
     }
@@ -216,21 +221,45 @@ class CourtServiceTest {
     @Test
     void shouldCancelTheUpcomingReservationsWhenDeactivatingTheCourt() {
         Court existingCourt = court(PREVIOUS_ACTOR_ID);
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.of(existingCourt));
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(existingCourt));
         when(courtRepository.save(existingCourt)).thenReturn(existingCourt);
 
         courtService.deactivateCourt(CURRENT_USER, COURT_ID);
 
-        verify(reservationService).cancelUpcomingReservations(CURRENT_USER, COURT_ID);
+        verify(reservationService).cancelUpcomingReservationsOfCourt(CURRENT_USER, COURT_ID);
+    }
+
+    @Test
+    void shouldDeactivateTheRecurringSlotsWhenDeactivatingTheCourt() {
+        Court existingCourt = court(PREVIOUS_ACTOR_ID);
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(existingCourt));
+        when(courtRepository.save(existingCourt)).thenReturn(existingCourt);
+
+        courtService.deactivateCourt(CURRENT_USER, COURT_ID);
+
+        verify(recurringSlotService).deactivateRecurringSlotsOfCourt(CURRENT_USER, COURT_ID);
+    }
+
+    @Test
+    void shouldLockTheCourtBeforeCancellingItsReservationsWhenDeactivating() {
+        Court existingCourt = court(PREVIOUS_ACTOR_ID);
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(existingCourt));
+        when(courtRepository.save(existingCourt)).thenReturn(existingCourt);
+
+        courtService.deactivateCourt(CURRENT_USER, COURT_ID);
+
+        InOrder lockThenCancel = inOrder(courtRepository, reservationService);
+        lockThenCancel.verify(courtRepository).findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID);
+        lockThenCancel.verify(reservationService).cancelUpcomingReservationsOfCourt(CURRENT_USER, COURT_ID);
     }
 
     @Test
     void shouldNotCancelReservationsWhenTheCourtIsNotFound() {
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.empty());
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> courtService.deactivateCourt(CURRENT_USER, COURT_ID)).isInstanceOf(CourtNotFoundException.class);
 
-        verifyNoInteractions(reservationService);
+        verifyNoInteractions(reservationService, recurringSlotService);
     }
 
     @Test

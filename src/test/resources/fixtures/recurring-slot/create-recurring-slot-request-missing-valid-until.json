@@ -1,0 +1,8 @@
+{
+  "courtId": 3,
+  "memberId": 10,
+  "dayOfWeek": "TUESDAY",
+  "startTime": "18:00",
+  "endTime": "19:00",
+  "validFrom": "2026-11-10"
+}

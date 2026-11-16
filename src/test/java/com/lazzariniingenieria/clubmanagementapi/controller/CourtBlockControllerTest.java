@@ -16,10 +16,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
+import com.lazzariniingenieria.clubmanagementapi.dto.AffectedReservationsSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CourtBlockResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CourtBlockSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateCourtBlockRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
+import com.lazzariniingenieria.clubmanagementapi.entity.ReservationSource;
+import com.lazzariniingenieria.clubmanagementapi.entity.ReservationStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
+import com.lazzariniingenieria.clubmanagementapi.exception.CourtBlockAffectsUnseenReservationsException;
 import com.lazzariniingenieria.clubmanagementapi.exception.CourtBlockNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.CourtNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidDateRangeException;
@@ -33,6 +38,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -116,6 +122,70 @@ class CourtBlockControllerTest {
 
         assertThat(request.startsAt()).isEqualTo(LocalDateTime.parse("2026-08-03T08:00"));
         assertThat(request.reason()).isEqualTo("Mantenimiento de superficie");
+    }
+
+    @Test
+    void shouldReadTheReservationIdsTheAdminSaw() throws Exception {
+        String requestBody = readFixture("create-court-block-request-with-reservations.json");
+        when(courtBlockService.createCourtBlock(any(AuthenticatedUser.class), eq(COURT_ID), any(CreateCourtBlockRequest.class)))
+                .thenReturn(courtBlockResponse());
+
+        mockMvc.perform(post(BLOCKS_PATH, COURT_ID)
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateCourtBlockRequest> requestCaptor = ArgumentCaptor.forClass(CreateCourtBlockRequest.class);
+        verify(courtBlockService).createCourtBlock(any(AuthenticatedUser.class), eq(COURT_ID), requestCaptor.capture());
+
+        assertThat(requestCaptor.getValue().reservationIdsToCancel()).containsExactly(45L, 46L);
+    }
+
+    @Test
+    void shouldReturnConflictListingTheReservationsTheAdminDidNotSee() throws Exception {
+        String requestBody = readFixture("create-court-block-request-with-reservations.json");
+        List<String> unseen = List.of("reservation 52 on 2026-08-04 18:00-19:00");
+        when(courtBlockService.createCourtBlock(any(AuthenticatedUser.class), eq(COURT_ID), any(CreateCourtBlockRequest.class)))
+                .thenThrow(new CourtBlockAffectsUnseenReservationsException(unseen));
+
+        mockMvc.perform(post(BLOCKS_PATH, COURT_ID)
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", is("court block would cancel reservations not shown to the admin")))
+                .andExpect(jsonPath("$.details[0]", is("reservation 52 on 2026-08-04 18:00-19:00")));
+    }
+
+    @Test
+    void shouldPreviewTheReservationsTheBlockWouldCancel() throws Exception {
+        AffectedReservationsSearchRequest filter = new AffectedReservationsSearchRequest(LocalDateTime.parse("2026-08-03T08:00"),
+                LocalDateTime.parse("2026-08-05T23:59"));
+        ReservationResponse activity = new ReservationResponse(45L, COURT_ID, null, ReservationSource.ACTIVITY, 30L, "Escuela de tenis",
+                LocalDate.parse("2026-08-04"), LocalTime.of(17, 0), LocalTime.of(18, 0), ReservationStatus.CONFIRMED,
+                Instant.parse("2026-07-30T12:00:00Z"), 2L, null, null);
+        when(courtBlockService.listAffectedReservations(CLUB_ID, COURT_ID, filter)).thenReturn(List.of(activity));
+
+        mockMvc.perform(get(BLOCKS_PATH + "/affected-reservations", COURT_ID)
+                        .with(asAdmin())
+                        .param("startsAt", "2026-08-03T08:00")
+                        .param("endsAt", "2026-08-05T23:59"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id", is(45)))
+                .andExpect(jsonPath("$[0].source", is("ACTIVITY")))
+                .andExpect(jsonPath("$[0].description", is("Escuela de tenis")));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenPreviewingWithoutEndsAt() throws Exception {
+        mockMvc.perform(get(BLOCKS_PATH + "/affected-reservations", COURT_ID)
+                        .with(asAdmin())
+                        .param("startsAt", "2026-08-03T08:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]", is("endsAt: endsAt is required")));
+
+        verifyNoInteractions(courtBlockService);
     }
 
     @Test

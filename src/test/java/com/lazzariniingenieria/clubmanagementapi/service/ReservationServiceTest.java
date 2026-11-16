@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.lazzariniingenieria.clubmanagementapi.dto.CreateCourtBlockRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateReservationRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationSearchRequest;
@@ -14,11 +15,13 @@ import com.lazzariniingenieria.clubmanagementapi.entity.Club;
 import com.lazzariniingenieria.clubmanagementapi.entity.Court;
 import com.lazzariniingenieria.clubmanagementapi.entity.CourtBlock;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
+import com.lazzariniingenieria.clubmanagementapi.entity.RecurringSlot;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.Reservation;
 import com.lazzariniingenieria.clubmanagementapi.entity.ReservationSource;
 import com.lazzariniingenieria.clubmanagementapi.entity.ReservationStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
+import com.lazzariniingenieria.clubmanagementapi.exception.CourtBlockAffectsUnseenReservationsException;
 import com.lazzariniingenieria.clubmanagementapi.exception.CourtNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidReservationException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
@@ -31,6 +34,7 @@ import com.lazzariniingenieria.clubmanagementapi.repository.ClubRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtBlockRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.RecurringSlotRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.ReservationRepository;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.time.Clock;
@@ -41,6 +45,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +60,9 @@ class ReservationServiceTest {
     private static final Long COURT_ID = 3L;
     private static final Long MEMBER_ID = 10L;
     private static final Long RESERVATION_ID = 20L;
+    private static final Long RECURRING_SLOT_ID = 30L;
+    private static final LocalDateTime BLOCK_STARTS_AT = LocalDateTime.parse("2026-11-09T19:00");
+    private static final LocalDateTime BLOCK_ENDS_AT = LocalDateTime.parse("2026-11-10T12:00");
     private static final Long ACTING_USER_ID = 2L;
     private static final LocalDate TODAY = LocalDate.parse("2026-11-09");
     private static final Instant NOW = Instant.parse("2026-11-09T23:30:00Z");
@@ -76,14 +84,18 @@ class ReservationServiceTest {
     @Mock
     private ClubRepository clubRepository;
 
+    @Mock
+    private RecurringSlotRepository recurringSlotRepository;
+
     private final ReservationMapper reservationMapper = new ReservationMapperImpl();
 
     private ReservationService reservationService;
 
     @BeforeEach
     void setUp() {
-        reservationService = new ReservationService(reservationRepository, courtRepository, courtBlockRepository, memberRepository,
-                clubRepository, reservationMapper, CLUB_CLOCK);
+        CourtBookingRules courtBookingRules = new CourtBookingRules(clubRepository, courtRepository, memberRepository);
+        reservationService = new ReservationService(reservationRepository, courtRepository, courtBlockRepository, recurringSlotRepository,
+                courtBookingRules, reservationMapper, CLUB_CLOCK);
     }
 
     @Test
@@ -130,7 +142,7 @@ class ReservationServiceTest {
     @Test
     void shouldThrowCourtNotFoundWhenCourtIsOfAnotherClub() {
         when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club(true)));
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.empty());
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.createReservation(CURRENT_USER, request("22:00", "23:00")))
                 .isInstanceOf(CourtNotFoundException.class);
@@ -141,7 +153,7 @@ class ReservationServiceTest {
         Court inactiveCourt = court();
         inactiveCourt.setActive(false);
         when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club(true)));
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.of(inactiveCourt));
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(inactiveCourt));
 
         assertThatThrownBy(() -> reservationService.createReservation(CURRENT_USER, request("22:00", "23:00")))
                 .isInstanceOf(InvalidReservationException.class)
@@ -151,7 +163,7 @@ class ReservationServiceTest {
     @Test
     void shouldThrowMemberNotFoundWhenMemberIsOfAnotherClub() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> reservationService.createReservation(CURRENT_USER, request("22:00", "23:00")))
                 .isInstanceOf(MemberNotFoundException.class);
@@ -160,7 +172,7 @@ class ReservationServiceTest {
     @Test
     void shouldRejectReservationForAnInactiveMember() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.INACTIVE)));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.INACTIVE)));
 
         assertThatThrownBy(() -> reservationService.createReservation(CURRENT_USER, request("22:00", "23:00")))
                 .isInstanceOf(InvalidReservationException.class)
@@ -289,7 +301,7 @@ class ReservationServiceTest {
         Reservation laterToday = reservation("21:00", "22:00");
         stubFromToday(List.of(earlierToday, laterToday));
 
-        int cancelled = reservationService.cancelUpcomingReservations(CURRENT_USER, COURT_ID);
+        int cancelled = reservationService.cancelUpcomingReservationsOfCourt(CURRENT_USER, COURT_ID);
 
         assertThat(cancelled).isEqualTo(1);
         assertThat(earlierToday.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
@@ -303,7 +315,131 @@ class ReservationServiceTest {
     void shouldCancelNothingWhenTheCourtHasNoUpcomingReservations() {
         stubFromToday(List.of());
 
-        int cancelled = reservationService.cancelUpcomingReservations(CURRENT_USER, COURT_ID);
+        int cancelled = reservationService.cancelUpcomingReservationsOfCourt(CURRENT_USER, COURT_ID);
+
+        assertThat(cancelled).isZero();
+    }
+
+    @Test
+    void shouldCancelOnlyTheUpcomingReservationsOfTheMember() {
+        Reservation earlierToday = reservation("18:00", "19:00");
+        Reservation laterToday = reservation("21:00", "22:00");
+        when(reservationRepository.findByMemberIdAndStatusAndDateGreaterThanEqual(MEMBER_ID, ReservationStatus.CONFIRMED, TODAY))
+                .thenReturn(List.of(earlierToday, laterToday));
+
+        int cancelled = reservationService.cancelUpcomingReservationsOfMember(CURRENT_USER, MEMBER_ID);
+
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(earlierToday.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(laterToday.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        verify(reservationRepository).saveAll(List.of(laterToday));
+    }
+
+    @Test
+    void shouldCancelOnlyTheUpcomingReservationsOfTheRecurringSlot() {
+        Reservation earlierToday = reservation("18:00", "19:00");
+        Reservation nextWeek = reservation("18:00", "19:00");
+        nextWeek.setDate(TODAY.plusWeeks(1));
+        when(reservationRepository.findByRecurringSlotIdAndStatusAndDateGreaterThanEqual(RECURRING_SLOT_ID, ReservationStatus.CONFIRMED,
+                TODAY)).thenReturn(List.of(earlierToday, nextWeek));
+
+        int cancelled = reservationService.cancelUpcomingReservationsOfRecurringSlot(CURRENT_USER, RECURRING_SLOT_ID);
+
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(earlierToday.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(nextWeek.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(nextWeek.getCancelledByUserId()).isEqualTo(ACTING_USER_ID);
+    }
+
+    @Test
+    void shouldListActivityOccurrencesWithTheDescriptionOfTheirRecurringSlot() {
+        Reservation activityOccurrence = reservation("21:00", "22:00");
+        activityOccurrence.setMemberId(null);
+        activityOccurrence.setSource(ReservationSource.ACTIVITY);
+        activityOccurrence.setRecurringSlotId(RECURRING_SLOT_ID);
+        RecurringSlot activity = RecurringSlot.builder().id(RECURRING_SLOT_ID).description("Escuela de tenis").build();
+        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        when(reservationRepository.findByCourtIdInAndDateAndStatusOrderByStartTimeAsc(List.of(COURT_ID), TODAY,
+                ReservationStatus.CONFIRMED)).thenReturn(List.of(activityOccurrence, reservation("19:00", "20:00")));
+        when(recurringSlotRepository.findAllById(Set.of(RECURRING_SLOT_ID))).thenReturn(List.of(activity));
+
+        List<ReservationResponse> response = reservationService.listReservations(CLUB_ID, new ReservationSearchRequest(TODAY, COURT_ID));
+
+        assertThat(response.get(0).recurringSlotId()).isEqualTo(RECURRING_SLOT_ID);
+        assertThat(response.get(0).description()).isEqualTo("Escuela de tenis");
+        assertThat(response.get(1).description()).isNull();
+    }
+
+    @Test
+    void shouldNotLookUpRecurringSlotsWhenNoListedReservationComesFromOne() {
+        when(courtRepository.existsByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(true);
+        when(reservationRepository.findByCourtIdInAndDateAndStatusOrderByStartTimeAsc(List.of(COURT_ID), TODAY,
+                ReservationStatus.CONFIRMED)).thenReturn(List.of(reservation("19:00", "20:00")));
+
+        reservationService.listReservations(CLUB_ID, new ReservationSearchRequest(TODAY, COURT_ID));
+
+        verify(recurringSlotRepository, never()).findAllById(any());
+    }
+
+    @Test
+    void shouldPreviewOnlyTheUpcomingReservationsThatOverlapTheBlock() {
+        stubReservationsAroundTheBlock();
+
+        List<ReservationResponse> response = reservationService.listReservationsAffectedByBlock(COURT_ID, BLOCK_STARTS_AT, BLOCK_ENDS_AT);
+
+        assertThat(response).extracting(ReservationResponse::id).containsExactly(3L, 4L);
+    }
+
+    @Test
+    void shouldCancelTheReservationsTheBlockOverlapsWhenTheAdminSawThemAll() {
+        List<Reservation> candidates = stubReservationsAroundTheBlock();
+
+        int cancelled = reservationService.cancelReservationsAffectedByBlock(CURRENT_USER, COURT_ID, blockRequest(List.of(3L, 4L)));
+
+        assertThat(cancelled).isEqualTo(2);
+        assertThat(candidates).extracting(Reservation::getStatus).containsExactly(ReservationStatus.CONFIRMED, ReservationStatus.CONFIRMED,
+                ReservationStatus.CANCELLED, ReservationStatus.CANCELLED, ReservationStatus.CONFIRMED);
+        assertThat(candidates.get(2).getCancelledByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(candidates.get(3).getCancelledAt()).isEqualTo(NOW);
+        verify(reservationRepository).saveAll(List.of(candidates.get(2), candidates.get(3)));
+    }
+
+    @Test
+    void shouldRejectTheBlockListingTheReservationsTheAdminDidNotSee() {
+        List<Reservation> candidates = stubReservationsAroundTheBlock();
+
+        assertThatThrownBy(() -> reservationService.cancelReservationsAffectedByBlock(CURRENT_USER, COURT_ID, blockRequest(List.of(3L))))
+                .isInstanceOf(CourtBlockAffectsUnseenReservationsException.class)
+                .extracting("unseenReservations")
+                .isEqualTo(List.of("reservation 4 on 2026-11-10 11:00-12:30"));
+
+        assertThat(candidates.get(2).getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        verify(reservationRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void shouldIgnoreShownReservationsThatTheBlockNoLongerAffects() {
+        stubReservationsAroundTheBlock();
+
+        int cancelled = reservationService.cancelReservationsAffectedByBlock(CURRENT_USER, COURT_ID, blockRequest(List.of(3L, 4L, 99L)));
+
+        assertThat(cancelled).isEqualTo(2);
+    }
+
+    @Test
+    void shouldTreatMissingReservationIdsAsNoneShown() {
+        stubReservationsAroundTheBlock();
+
+        assertThatThrownBy(() -> reservationService.cancelReservationsAffectedByBlock(CURRENT_USER, COURT_ID, blockRequest(null)))
+                .isInstanceOf(CourtBlockAffectsUnseenReservationsException.class);
+    }
+
+    @Test
+    void shouldCancelNothingWhenTheBlockAffectsNoReservation() {
+        when(reservationRepository.findByCourtIdAndStatusAndDateBetweenOrderByDateAscStartTimeAsc(COURT_ID, ReservationStatus.CONFIRMED,
+                TODAY, TODAY.plusDays(1))).thenReturn(List.of());
+
+        int cancelled = reservationService.cancelReservationsAffectedByBlock(CURRENT_USER, COURT_ID, blockRequest(null));
 
         assertThat(cancelled).isZero();
     }
@@ -353,6 +489,31 @@ class ReservationServiceTest {
                 .isInstanceOf(ReservationNotFoundException.class);
     }
 
+    private List<Reservation> stubReservationsAroundTheBlock() {
+        List<Reservation> candidates = List.of(
+                reservationOn(1L, TODAY, "18:00", "19:00"),
+                reservationOn(2L, TODAY, "19:30", "20:45"),
+                reservationOn(3L, TODAY, "21:00", "22:00"),
+                reservationOn(4L, TODAY.plusDays(1), "11:00", "12:30"),
+                reservationOn(5L, TODAY.plusDays(1), "12:00", "13:00"));
+        when(reservationRepository.findByCourtIdAndStatusAndDateBetweenOrderByDateAscStartTimeAsc(COURT_ID, ReservationStatus.CONFIRMED,
+                TODAY, TODAY.plusDays(1))).thenReturn(candidates);
+
+        return candidates;
+    }
+
+    private CreateCourtBlockRequest blockRequest(List<Long> reservationIdsToCancel) {
+        return new CreateCourtBlockRequest(BLOCK_STARTS_AT, BLOCK_ENDS_AT, "Torneo", reservationIdsToCancel);
+    }
+
+    private Reservation reservationOn(Long id, LocalDate date, String startTime, String endTime) {
+        Reservation reservation = reservation(startTime, endTime);
+        reservation.setId(id);
+        reservation.setDate(date);
+
+        return reservation;
+    }
+
     private void stubFromToday(List<Reservation> reservations) {
         when(reservationRepository.findByCourtIdAndStatusAndDateGreaterThanEqualOrderByDateAscStartTimeAsc(COURT_ID,
                 ReservationStatus.CONFIRMED, TODAY)).thenReturn(reservations);
@@ -360,12 +521,12 @@ class ReservationServiceTest {
 
     private void stubClubCourtAndMember() {
         stubClubAndCourt();
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
     }
 
     private void stubClubAndCourt() {
         when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club(true)));
-        when(courtRepository.findByIdAndClubId(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
+        when(courtRepository.findByIdAndClubIdForUpdate(COURT_ID, CLUB_ID)).thenReturn(Optional.of(court()));
     }
 
     private CreateReservationRequest request(String startTime, String endTime) {

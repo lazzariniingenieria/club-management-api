@@ -23,6 +23,10 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     Optional<Member> findByIdAndClubId(Long id, Long clubId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from Member m where m.id = :id and m.clubId = :clubId")
+    Optional<Member> findByIdAndClubIdForUpdate(@Param("id") Long id, @Param("clubId") Long clubId);
+
     List<Member> findByClubIdOrderByCreatedAtDesc(Long clubId);
 
     List<Member> findByClubIdAndStatusOrderByCreatedAtDesc(Long clubId, MemberStatus status);

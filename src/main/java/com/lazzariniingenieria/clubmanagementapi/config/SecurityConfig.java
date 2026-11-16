@@ -44,6 +44,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/clubs/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/courts/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/reservations/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers("/api/recurring-slots/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .anyRequest().authenticated());
         JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtService, accountSessionService);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

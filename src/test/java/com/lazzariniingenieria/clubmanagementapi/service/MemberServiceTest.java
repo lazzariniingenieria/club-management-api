@@ -3,8 +3,10 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateMemberRequest;
@@ -30,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -51,13 +54,19 @@ class MemberServiceTest {
     @Mock
     private FamilyGroupRepository familyGroupRepository;
 
+    @Mock
+    private ReservationService reservationService;
+
+    @Mock
+    private RecurringSlotService recurringSlotService;
+
     private final MemberMapper memberMapper = new MemberMapperImpl();
 
     private MemberService memberService;
 
     @BeforeEach
     void setUp() {
-        memberService = new MemberService(memberRepository, memberMapper, familyGroupRepository);
+        memberService = new MemberService(memberRepository, memberMapper, familyGroupRepository, reservationService, recurringSlotService);
     }
 
     @Test
@@ -350,7 +359,7 @@ class MemberServiceTest {
     @Test
     void shouldDeactivateMemberWhenFound() {
         Member existingMember = member(PREVIOUS_ACTOR_ID);
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
         when(memberRepository.save(existingMember)).thenReturn(existingMember);
 
         MemberResponse response = memberService.deactivateMember(CURRENT_USER, MEMBER_ID);
@@ -364,10 +373,46 @@ class MemberServiceTest {
 
     @Test
     void shouldThrowMemberNotFoundWhenDeactivatingMissingMember() {
-        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> memberService.deactivateMember(CURRENT_USER, MEMBER_ID))
-                .isInstanceOf(MemberNotFoundException.class);
+        assertThatThrownBy(() -> memberService.deactivateMember(CURRENT_USER, MEMBER_ID)).isInstanceOf(MemberNotFoundException.class);
+
+        verifyNoInteractions(reservationService, recurringSlotService);
+    }
+
+    @Test
+    void shouldCancelTheUpcomingReservationsWhenDeactivatingTheMember() {
+        Member existingMember = member(PREVIOUS_ACTOR_ID);
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        memberService.deactivateMember(CURRENT_USER, MEMBER_ID);
+
+        verify(reservationService).cancelUpcomingReservationsOfMember(CURRENT_USER, MEMBER_ID);
+    }
+
+    @Test
+    void shouldDeactivateTheRecurringSlotsWhenDeactivatingTheMember() {
+        Member existingMember = member(PREVIOUS_ACTOR_ID);
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        memberService.deactivateMember(CURRENT_USER, MEMBER_ID);
+
+        verify(recurringSlotService).deactivateRecurringSlotsOfMember(CURRENT_USER, MEMBER_ID);
+    }
+
+    @Test
+    void shouldLockTheMemberBeforeCancellingItsReservationsWhenDeactivating() {
+        Member existingMember = member(PREVIOUS_ACTOR_ID);
+        when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(existingMember));
+        when(memberRepository.save(existingMember)).thenReturn(existingMember);
+
+        memberService.deactivateMember(CURRENT_USER, MEMBER_ID);
+
+        InOrder lockThenCancel = inOrder(memberRepository, reservationService);
+        lockThenCancel.verify(memberRepository).findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID);
+        lockThenCancel.verify(reservationService).cancelUpcomingReservationsOfMember(CURRENT_USER, MEMBER_ID);
     }
 
     @Test

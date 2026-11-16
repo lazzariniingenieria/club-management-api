@@ -26,6 +26,7 @@ public class CourtService {
     private final CourtRepository courtRepository;
     private final CourtMapper courtMapper;
     private final ReservationService reservationService;
+    private final RecurringSlotService recurringSlotService;
 
     public CourtResponse createCourt(AuthenticatedUser currentUser, CreateCourtRequest request) {
         Long clubId = currentUser.clubId();
@@ -79,23 +80,25 @@ public class CourtService {
 
     @Transactional
     public CourtResponse deactivateCourt(AuthenticatedUser currentUser, Long courtId) {
-        Court savedCourt = saveActive(currentUser, courtId, false);
-        int cancelledReservations = reservationService.cancelUpcomingReservations(currentUser, courtId);
-        log.info("Deactivated court courtId={} for clubId={}, cancelling {} upcoming reservation(s)", courtId, currentUser.clubId(),
-                cancelledReservations);
+        Court court = lockCourtOrThrow(currentUser.clubId(), courtId);
+        Court savedCourt = saveActive(currentUser, court, false);
+        int cancelledReservations = reservationService.cancelUpcomingReservationsOfCourt(currentUser, courtId);
+        int deactivatedRecurringSlots = recurringSlotService.deactivateRecurringSlotsOfCourt(currentUser, courtId);
+        log.info("Deactivated court courtId={} for clubId={}, cancelling {} upcoming reservation(s) and {} recurring slot(s)", courtId,
+                currentUser.clubId(), cancelledReservations, deactivatedRecurringSlots);
 
         return courtMapper.toResponse(savedCourt);
     }
 
     public CourtResponse reactivateCourt(AuthenticatedUser currentUser, Long courtId) {
-        Court savedCourt = saveActive(currentUser, courtId, true);
+        Court court = findCourtOrThrow(currentUser.clubId(), courtId);
+        Court savedCourt = saveActive(currentUser, court, true);
         log.info("Reactivated court courtId={} for clubId={}", courtId, currentUser.clubId());
 
         return courtMapper.toResponse(savedCourt);
     }
 
-    private Court saveActive(AuthenticatedUser currentUser, Long courtId, boolean active) {
-        Court court = findCourtOrThrow(currentUser.clubId(), courtId);
+    private Court saveActive(AuthenticatedUser currentUser, Court court, boolean active) {
         court.setActive(active);
         markUpdated(court, currentUser.userAccountId());
 
@@ -136,5 +139,9 @@ public class CourtService {
         return courtRepository
                 .findByIdAndClubId(courtId, clubId)
                 .orElseThrow(() -> new CourtNotFoundException(courtId));
+    }
+
+    private Court lockCourtOrThrow(Long clubId, Long courtId) {
+        return courtRepository.findByIdAndClubIdForUpdate(courtId, clubId).orElseThrow(() -> new CourtNotFoundException(courtId));
     }
 }

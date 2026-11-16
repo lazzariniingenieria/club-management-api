@@ -19,6 +19,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +29,8 @@ public class MemberService {
     private final MemberRepository memberRepository;
     private final MemberMapper memberMapper;
     private final FamilyGroupRepository familyGroupRepository;
+    private final ReservationService reservationService;
+    private final RecurringSlotService recurringSlotService;
 
     public MemberResponse createMember(AuthenticatedUser currentUser, CreateMemberRequest request) {
         Long clubId = currentUser.clubId();
@@ -106,14 +109,18 @@ public class MemberService {
         return memberMapper.toResponse(savedMember);
     }
 
+    @Transactional
     public MemberResponse deactivateMember(AuthenticatedUser currentUser, Long memberId) {
         Long clubId = currentUser.clubId();
-        Member member = findMemberOrThrow(clubId, memberId);
+        Member member = lockMemberOrThrow(clubId, memberId);
         member.setStatus(MemberStatus.INACTIVE);
         markUpdated(member, currentUser.userAccountId());
 
         Member savedMember = memberRepository.save(member);
-        log.info("Deactivated member memberId={} for clubId={}", memberId, clubId);
+        int cancelledReservations = reservationService.cancelUpcomingReservationsOfMember(currentUser, memberId);
+        int deactivatedRecurringSlots = recurringSlotService.deactivateRecurringSlotsOfMember(currentUser, memberId);
+        log.info("Deactivated member memberId={} for clubId={}, cancelling {} upcoming reservation(s) and {} recurring slot(s)", memberId,
+                clubId, cancelledReservations, deactivatedRecurringSlots);
 
         return memberMapper.toResponse(savedMember);
     }
@@ -194,5 +201,9 @@ public class MemberService {
         return memberRepository
                 .findByIdAndClubId(memberId, clubId)
                 .orElseThrow(() -> new MemberNotFoundException(memberId));
+    }
+
+    private Member lockMemberOrThrow(Long clubId, Long memberId) {
+        return memberRepository.findByIdAndClubIdForUpdate(memberId, clubId).orElseThrow(() -> new MemberNotFoundException(memberId));
     }
 }
