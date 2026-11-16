@@ -1,6 +1,7 @@
 package com.lazzariniingenieria.clubmanagementapi.controller;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateRecurringSlotRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotCreatedResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RenewRecurringSlotRequest;
@@ -29,9 +30,9 @@ public class RecurringSlotController {
     private final RecurringSlotService recurringSlotService;
 
     @PostMapping
-    public ResponseEntity<RecurringSlotResponse> create(@AuthenticationPrincipal AuthenticatedUser currentUser,
-                                                        @Valid @RequestBody CreateRecurringSlotRequest request) {
-        RecurringSlotResponse response = recurringSlotService.createRecurringSlot(currentUser, request);
+    public ResponseEntity<RecurringSlotCreatedResponse> create(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                               @Valid @RequestBody CreateRecurringSlotRequest request) {
+        RecurringSlotCreatedResponse response = recurringSlotService.createRecurringSlot(currentUser, request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -61,10 +62,10 @@ public class RecurringSlotController {
     }
 
     @PostMapping("/{recurringSlotId}/renew")
-    public ResponseEntity<RecurringSlotResponse> renew(@AuthenticationPrincipal AuthenticatedUser currentUser,
-                                                       @PathVariable Long recurringSlotId,
-                                                       @Valid @RequestBody RenewRecurringSlotRequest request) {
-        RecurringSlotResponse response = recurringSlotService.renewRecurringSlot(currentUser, recurringSlotId, request);
+    public ResponseEntity<RecurringSlotCreatedResponse> renew(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                              @PathVariable Long recurringSlotId,
+                                                              @Valid @RequestBody RenewRecurringSlotRequest request) {
+        RecurringSlotCreatedResponse response = recurringSlotService.renewRecurringSlot(currentUser, recurringSlotId, request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

@@ -2,10 +2,12 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateCourtBlockRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateReservationRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ReservationCreatedResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Court;
 import com.lazzariniingenieria.clubmanagementapi.entity.CourtBlock;
+import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.RecurringSlot;
 import com.lazzariniingenieria.clubmanagementapi.entity.Reservation;
 import com.lazzariniingenieria.clubmanagementapi.entity.ReservationSource;
@@ -48,24 +50,27 @@ public class ReservationService {
     private final RecurringSlotRepository recurringSlotRepository;
     private final CourtBookingRules courtBookingRules;
     private final ReservationMapper reservationMapper;
+    private final MemberDelinquencyCalculator memberDelinquencyCalculator;
     private final Clock clubClock;
 
     @Transactional
-    public ReservationResponse createReservation(AuthenticatedUser currentUser, CreateReservationRequest request) {
+    public ReservationCreatedResponse createReservation(AuthenticatedUser currentUser, CreateReservationRequest request) {
         Long clubId = currentUser.clubId();
         courtBookingRules.validateCourtsEnabled(clubId);
         Court court = courtBookingRules.lockActiveCourtOrThrow(clubId, request.courtId());
-        courtBookingRules.lockActiveMember(clubId, request.memberId());
+        Member member = courtBookingRules.lockActiveMember(clubId, request.memberId());
         courtBookingRules.validateFitsCourtHours(court, request.startTime(), request.endTime());
         validateStartsInTheFuture(request);
         validateCourtIsNotBlocked(court.getId(), request);
         validateSlotIsNotReserved(court.getId(), request);
 
         Reservation savedReservation = reservationRepository.save(newReservation(currentUser, request));
-        log.info("Reserved courtId={} on {} from {} to {} for memberId={} with reservationId={} in clubId={}", court.getId(),
-                request.date(), request.startTime(), request.endTime(), request.memberId(), savedReservation.getId(), clubId);
+        long memberDaysOverdue = memberDelinquencyCalculator.daysOverdue(member);
+        log.info("Reserved courtId={} on {} from {} to {} for memberId={} ({} days overdue) with reservationId={} in clubId={}",
+                court.getId(), request.date(), request.startTime(), request.endTime(), request.memberId(), memberDaysOverdue,
+                savedReservation.getId(), clubId);
 
-        return toResponse(savedReservation);
+        return new ReservationCreatedResponse(toResponse(savedReservation), memberDaysOverdue);
     }
 
     public List<ReservationResponse> listReservations(Long clubId, ReservationSearchRequest filter) {

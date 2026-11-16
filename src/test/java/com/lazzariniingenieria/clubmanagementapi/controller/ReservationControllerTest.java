@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateReservationRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.ReservationCreatedResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.ReservationSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.ReservationSource;
@@ -73,7 +74,7 @@ class ReservationControllerTest {
     void shouldReturnCreatedReservationWhenRequesterIsAdmin() throws Exception {
         String requestBody = readFixture("create-reservation-request-valid.json");
         when(reservationService.createReservation(any(AuthenticatedUser.class), any(CreateReservationRequest.class)))
-                .thenReturn(reservationResponse(ReservationStatus.CONFIRMED));
+                .thenReturn(new ReservationCreatedResponse(reservationResponse(ReservationStatus.CONFIRMED), 39));
 
         mockMvc.perform(post("/api/reservations")
                         .with(asAdmin())
@@ -84,14 +85,16 @@ class ReservationControllerTest {
                 .andExpect(jsonPath("$.date", is("2026-11-09")))
                 .andExpect(jsonPath("$.startTime", is("22:00:00")))
                 .andExpect(jsonPath("$.source", is("MEMBER")))
-                .andExpect(jsonPath("$.status", is("CONFIRMED")));
+                .andExpect(jsonPath("$.status", is("CONFIRMED")))
+                .andExpect(jsonPath("$.memberDaysOverdue", is(39)))
+                .andExpect(jsonPath("$.reservation").doesNotExist());
     }
 
     @Test
     void shouldReturnCreatedReservationWhenRequesterIsSuperAdmin() throws Exception {
         String requestBody = readFixture("create-reservation-request-valid.json");
         when(reservationService.createReservation(any(AuthenticatedUser.class), any(CreateReservationRequest.class)))
-                .thenReturn(reservationResponse(ReservationStatus.CONFIRMED));
+                .thenReturn(new ReservationCreatedResponse(reservationResponse(ReservationStatus.CONFIRMED), 39));
 
         mockMvc.perform(post("/api/reservations")
                         .with(asSuperAdmin())

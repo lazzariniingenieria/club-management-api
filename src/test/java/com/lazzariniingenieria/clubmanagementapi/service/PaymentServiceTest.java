@@ -35,6 +35,7 @@ import com.lazzariniingenieria.clubmanagementapi.repository.PaymentRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.PaymentSearchSpecification;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -72,7 +73,9 @@ class PaymentServiceTest {
 
     @BeforeEach
     void setUp() {
-        paymentService = new PaymentService(paymentRepository, memberRepository, paymentMapper);
+        MemberDelinquencyCalculator memberDelinquencyCalculator = new MemberDelinquencyCalculator(paymentRepository,
+                Clock.systemDefaultZone());
+        paymentService = new PaymentService(paymentRepository, memberRepository, paymentMapper, memberDelinquencyCalculator);
     }
 
     @Test

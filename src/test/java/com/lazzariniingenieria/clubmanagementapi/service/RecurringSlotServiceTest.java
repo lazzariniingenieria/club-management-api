@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateRecurringSlotRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotCreatedResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RenewRecurringSlotRequest;
@@ -35,7 +36,9 @@ import com.lazzariniingenieria.clubmanagementapi.mapper.RecurringSlotMapperImpl;
 import com.lazzariniingenieria.clubmanagementapi.repository.ClubRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtBlockRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.CourtRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.MemberLastPaidPeriod;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
+import com.lazzariniingenieria.clubmanagementapi.repository.PaymentRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.RecurringSlotRepository;
 import com.lazzariniingenieria.clubmanagementapi.repository.RecurringSlotSearchSpecification;
 import com.lazzariniingenieria.clubmanagementapi.repository.ReservationRepository;
@@ -66,6 +69,7 @@ class RecurringSlotServiceTest {
     private static final Long RECURRING_SLOT_ID = 30L;
     private static final Long ACTING_USER_ID = 2L;
     private static final LocalDate TODAY = LocalDate.parse("2026-11-09");
+    private static final LocalDate MEMBER_JOINED_AT = LocalDate.parse("2026-10-01");
     private static final LocalDate NEXT_TUESDAY = LocalDate.parse("2026-11-10");
     private static final LocalDate FOURTH_TUESDAY = LocalDate.parse("2026-12-01");
     private static final Instant NOW = Instant.parse("2026-11-09T23:30:00Z");
@@ -93,6 +97,9 @@ class RecurringSlotServiceTest {
     @Mock
     private ReservationService reservationService;
 
+    @Mock
+    private PaymentRepository paymentRepository;
+
     private final RecurringSlotMapper recurringSlotMapper = new RecurringSlotMapperImpl();
 
     private RecurringSlotService recurringSlotService;
@@ -100,8 +107,10 @@ class RecurringSlotServiceTest {
     @BeforeEach
     void setUp() {
         CourtBookingRules courtBookingRules = new CourtBookingRules(clubRepository, courtRepository, memberRepository);
+        MemberDelinquencyCalculator memberDelinquencyCalculator = new MemberDelinquencyCalculator(paymentRepository, CLUB_CLOCK);
         recurringSlotService = new RecurringSlotService(recurringSlotRepository, reservationRepository, courtBlockRepository,
-                courtRepository, memberRepository, courtBookingRules, reservationService, recurringSlotMapper, CLUB_CLOCK);
+                courtRepository, memberRepository, courtBookingRules, reservationService, recurringSlotMapper, memberDelinquencyCalculator,
+                CLUB_CLOCK);
     }
 
     @Test
@@ -111,13 +120,52 @@ class RecurringSlotServiceTest {
 
         CreateRecurringSlotRequest request = memberRequest(NEXT_TUESDAY, FOURTH_TUESDAY);
 
-        RecurringSlotResponse response = recurringSlotService.createRecurringSlot(CURRENT_USER, request);
+        RecurringSlotCreatedResponse response = recurringSlotService.createRecurringSlot(CURRENT_USER, request);
 
         List<Reservation> occurrences = savedOccurrences();
         assertThat(occurrences).extracting(Reservation::getDate).containsExactly(NEXT_TUESDAY, LocalDate.parse("2026-11-17"),
                 LocalDate.parse("2026-11-24"), FOURTH_TUESDAY);
-        assertThat(response.id()).isEqualTo(RECURRING_SLOT_ID);
-        assertThat(response.state()).isEqualTo(RecurringSlotState.CURRENT);
+        assertThat(response.recurringSlot().id()).isEqualTo(RECURRING_SLOT_ID);
+        assertThat(response.recurringSlot().state()).isEqualTo(RecurringSlotState.CURRENT);
+    }
+
+    @Test
+    void shouldCreateTheSlotOfADelinquentMemberAndReportHowManyDaysTheyAreOverdue() {
+        stubClubCourtAndMember();
+        stubSaveSlot();
+
+        CreateRecurringSlotRequest request = memberRequest(NEXT_TUESDAY, FOURTH_TUESDAY);
+
+        RecurringSlotCreatedResponse response = recurringSlotService.createRecurringSlot(CURRENT_USER, request);
+
+        assertThat(response.memberDaysOverdue()).isEqualTo(39);
+    }
+
+    @Test
+    void shouldReportZeroDaysOverdueWhenTheSlotMemberIsUpToDate() {
+        stubClubCourtAndMember();
+        stubSaveSlot();
+        MemberLastPaidPeriod currentMonthPaid = lastPaidPeriod(TODAY.withDayOfMonth(1));
+        when(paymentRepository.findLastPaidPeriodByMemberIds(List.of(MEMBER_ID))).thenReturn(List.of(currentMonthPaid));
+
+        CreateRecurringSlotRequest request = memberRequest(NEXT_TUESDAY, FOURTH_TUESDAY);
+
+        RecurringSlotCreatedResponse response = recurringSlotService.createRecurringSlot(CURRENT_USER, request);
+
+        assertThat(response.memberDaysOverdue()).isZero();
+    }
+
+    @Test
+    void shouldReportNoDaysOverdueForAClubActivityBecauseItHasNoMember() {
+        stubClubAndCourt();
+        stubSaveSlot();
+
+        CreateRecurringSlotRequest request = request(null, "Escuela de tenis", NEXT_TUESDAY, FOURTH_TUESDAY);
+
+        RecurringSlotCreatedResponse response = recurringSlotService.createRecurringSlot(CURRENT_USER, request);
+
+        assertThat(response.memberDaysOverdue()).isNull();
+        verifyNoInteractions(paymentRepository);
     }
 
     @Test
@@ -498,11 +546,11 @@ class RecurringSlotServiceTest {
         when(memberRepository.findByIdAndClubIdForUpdate(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MemberStatus.ACTIVE)));
         when(recurringSlotRepository.save(any(RecurringSlot.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), 31L));
 
-        RecurringSlotResponse response = recurringSlotService.renewRecurringSlot(CURRENT_USER, RECURRING_SLOT_ID,
+        RecurringSlotCreatedResponse response = recurringSlotService.renewRecurringSlot(CURRENT_USER, RECURRING_SLOT_ID,
                 new RenewRecurringSlotRequest(NEXT_TUESDAY, FOURTH_TUESDAY));
 
         RecurringSlot renewed = savedSlot();
-        assertThat(response.id()).isEqualTo(31L);
+        assertThat(response.recurringSlot().id()).isEqualTo(31L);
         assertThat(renewed.getMemberId()).isEqualTo(MEMBER_ID);
         assertThat(renewed.getDayOfWeek()).isEqualTo(DayOfWeek.TUESDAY);
         assertThat(renewed.getStartTime()).isEqualTo(LocalTime.of(18, 0));
@@ -654,6 +702,19 @@ class RecurringSlotServiceTest {
     }
 
     private Member member(MemberStatus status) {
-        return Member.builder().id(MEMBER_ID).clubId(CLUB_ID).status(status).build();
+        return Member.builder().id(MEMBER_ID).clubId(CLUB_ID).status(status).joinedAt(MEMBER_JOINED_AT).build();
+    }
+    private MemberLastPaidPeriod lastPaidPeriod(LocalDate lastPeriodCovered) {
+        return new MemberLastPaidPeriod() {
+            @Override
+            public Long getMemberId() {
+                return MEMBER_ID;
+            }
+
+            @Override
+            public LocalDate getLastPeriodCovered() {
+                return lastPeriodCovered;
+            }
+        };
     }
 }
