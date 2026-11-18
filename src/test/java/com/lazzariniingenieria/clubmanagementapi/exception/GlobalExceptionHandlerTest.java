@@ -164,6 +164,48 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnNotFoundWithExceptionMessageWhenMemberHasNoMemberAccount() {
+        MemberAccountNotFoundException exception = new MemberAccountNotFoundException(34L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleMemberAccountNotFound(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(body.status()).isEqualTo(404);
+        assertThat(body.error()).isEqualTo("Not Found");
+        assertThat(body.message()).isEqualTo("member 34 has no member account");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnBadRequestWithExceptionMessageWhenMemberAccountCannotBeCreated() {
+        InvalidMemberAccountException exception = new InvalidMemberAccountException("member 34 has no dni");
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleInvalidMemberAccount(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.error()).isEqualTo("Bad Request");
+        assertThat(body.message()).isEqualTo("member 34 has no dni");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnConflictWithExceptionMessageWhenMemberAlreadyHasAnAccount() {
+        MemberAlreadyHasAccountException exception = new MemberAlreadyHasAccountException(34L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleMemberAlreadyHasAccount(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(body.status()).isEqualTo(409);
+        assertThat(body.error()).isEqualTo("Conflict");
+        assertThat(body.message()).isEqualTo("member 34 already has an account");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
     void shouldReturnNotFoundWithExceptionMessageWhenFamilyGroupDoesNotExist() {
         FamilyGroupNotFoundException exception = new FamilyGroupNotFoundException(42L);
 

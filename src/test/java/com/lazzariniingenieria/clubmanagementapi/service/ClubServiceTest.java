@@ -85,6 +85,26 @@ class ClubServiceTest {
     }
 
     @Test
+    void shouldTellWhetherTheClubHasTheMemberAppEnabled() {
+        Club club = club(null);
+        club.setMemberAppEnabled(true);
+        when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club));
+
+        ClubResponse response = clubService.getClub(CLUB_ID);
+
+        assertThat(response.memberAppEnabled()).isTrue();
+    }
+
+    @Test
+    void shouldReportMemberAppDisabledByDefault() {
+        when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.of(club(null)));
+
+        ClubResponse response = clubService.getClub(CLUB_ID);
+
+        assertThat(response.memberAppEnabled()).isFalse();
+    }
+
+    @Test
     void shouldThrowClubNotFoundWhenTokenClubHasNoRow() {
         when(clubRepository.findById(CLUB_ID)).thenReturn(Optional.empty());
 
