@@ -71,6 +71,27 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(MemberAccountNotFoundException.class)
+    public ResponseEntity<ApiErrorDto> handleMemberAccountNotFound(MemberAccountNotFoundException exception) {
+        log.warn("Member account lookup failed: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(InvalidMemberAccountException.class)
+    public ResponseEntity<ApiErrorDto> handleInvalidMemberAccount(InvalidMemberAccountException exception) {
+        log.warn("Rejected member account creation: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(MemberAlreadyHasAccountException.class)
+    public ResponseEntity<ApiErrorDto> handleMemberAlreadyHasAccount(MemberAlreadyHasAccountException exception) {
+        log.warn("Rejected member account creation for a member that already has one: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(FamilyGroupNotFoundException.class)
     public ResponseEntity<ApiErrorDto> handleFamilyGroupNotFound(FamilyGroupNotFoundException exception) {
         log.warn("Family group lookup failed: {}", exception.getMessage());

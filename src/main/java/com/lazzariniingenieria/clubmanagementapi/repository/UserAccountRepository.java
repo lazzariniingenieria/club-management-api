@@ -22,6 +22,15 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
 
     List<UserAccount> findByClubIdAndRoleOrderByCreatedAtDesc(Long clubId, UserRole role);
 
+    Optional<UserAccount> findByMemberIdAndClubId(Long memberId, Long clubId);
+
+    boolean existsByMemberIdAndClubId(Long memberId, Long clubId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from UserAccount u where u.memberId = :memberId and u.clubId = :clubId and u.role = :role")
+    Optional<UserAccount> findByMemberIdAndClubIdAndRoleForUpdate(@Param("memberId") Long memberId, @Param("clubId") Long clubId,
+                                                                  @Param("role") UserRole role);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from UserAccount u where u.clubId = :clubId and u.dni = :dni")
     Optional<UserAccount> findByClubIdAndDniForUpdate(@Param("clubId") Long clubId, @Param("dni") String dni);

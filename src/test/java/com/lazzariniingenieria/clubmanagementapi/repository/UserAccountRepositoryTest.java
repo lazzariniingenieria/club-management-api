@@ -38,6 +38,14 @@ class UserAccountRepositoryTest {
         assertThat(lockModeOf(method)).isEqualTo(LockModeType.PESSIMISTIC_WRITE);
     }
 
+    @Test
+    void shouldLockTheMemberAccountWhileResettingItsPasswordSoASessionCutCannotMissTheNewTokens() throws NoSuchMethodException {
+        Method method = UserAccountRepository.class.getMethod("findByMemberIdAndClubIdAndRoleForUpdate", Long.class, Long.class,
+                UserRole.class);
+
+        assertThat(lockModeOf(method)).isEqualTo(LockModeType.PESSIMISTIC_WRITE);
+    }
+
     private LockModeType lockModeOf(Method method) {
         return method.getAnnotation(Lock.class).value();
     }
