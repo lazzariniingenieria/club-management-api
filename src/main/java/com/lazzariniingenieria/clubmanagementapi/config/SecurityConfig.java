@@ -37,6 +37,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/refresh").permitAll()
                 .requestMatchers(HttpMethod.PATCH, "/api/auth/me/password").hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/me/payments").hasAnyRole("SUPER_ADMIN", "ADMIN", "MEMBER")
                 .requestMatchers("/api/admins/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/members/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/api/family-groups/**").hasAnyRole("SUPER_ADMIN", "ADMIN")

@@ -1,5 +1,6 @@
 package com.lazzariniingenieria.clubmanagementapi.mapper;
 
+import com.lazzariniingenieria.clubmanagementapi.dto.OwnPaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.entity.Payment;
 import java.util.List;
@@ -11,4 +12,8 @@ public interface PaymentMapper {
     PaymentResponse toResponse(Payment payment);
 
     List<PaymentResponse> toResponseList(List<Payment> payments);
+
+    OwnPaymentResponse toOwnPaymentResponse(Payment payment);
+
+    List<OwnPaymentResponse> toOwnPaymentResponseList(List<Payment> payments);
 }

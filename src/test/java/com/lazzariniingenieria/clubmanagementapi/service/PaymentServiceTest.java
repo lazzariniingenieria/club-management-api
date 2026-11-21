@@ -10,6 +10,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
+import com.lazzariniingenieria.clubmanagementapi.dto.OwnPaymentResponse;
+import com.lazzariniingenieria.clubmanagementapi.dto.OwnPaymentsResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentBatchRequest;
@@ -20,6 +22,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.Payment;
 import com.lazzariniingenieria.clubmanagementapi.entity.PaymentMethod;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
+import com.lazzariniingenieria.clubmanagementapi.exception.AccountNotLinkedToMemberException;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicatePeriodCoveredException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidDateRangeException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
@@ -60,6 +63,8 @@ class PaymentServiceTest {
     private static final Long PAYMENT_ID = 100L;
     private static final BigDecimal AMOUNT = new BigDecimal("15000.00");
     private static final AuthenticatedUser CURRENT_USER = new AuthenticatedUser(ACTING_USER_ID, CLUB_ID, UserRole.ADMIN, null);
+    private static final AuthenticatedUser MEMBER_USER = new AuthenticatedUser(OTHER_USER_ID, CLUB_ID, UserRole.MEMBER, MEMBER_ID);
+    private static final AuthenticatedUser SUPER_ADMIN_USER = new AuthenticatedUser(1L, CLUB_ID, UserRole.SUPER_ADMIN, null);
 
     @Mock
     private PaymentRepository paymentRepository;
@@ -535,6 +540,114 @@ class PaymentServiceTest {
 
     private PaymentSearchRequest emptySearch() {
         return new PaymentSearchRequest(null, null, null, null, false);
+    }
+
+    @Test
+    void shouldListOnlyTheNonVoidedPaymentsOfTheLinkedMemberMostRecentPeriodFirst() {
+        LocalDate july = LocalDate.parse("2026-07-01");
+        LocalDate june = LocalDate.parse("2026-06-01");
+        stubLinkedMember();
+        stubOwnPayments(payment(MEMBER_ID, july), payment(MEMBER_ID, june));
+
+        OwnPaymentsResponse response = paymentService.getOwnPayments(MEMBER_USER);
+
+        assertThat(response.payments()).extracting(OwnPaymentResponse::periodCovered).containsExactly(july, june);
+        verify(paymentRepository, never()).findByMemberIdOrderByPeriodCoveredDesc(any());
+    }
+
+    @Test
+    void shouldMapEveryOwnPaymentFieldFromThePayment() {
+        Payment payment = payment(MEMBER_ID, LocalDate.parse("2026-07-01"));
+        payment.setPaidAt(Instant.parse("2026-07-03T14:00:00Z"));
+        stubLinkedMember();
+        stubOwnPayments(payment);
+
+        OwnPaymentsResponse response = paymentService.getOwnPayments(MEMBER_USER);
+        OwnPaymentResponse ownPayment = response.payments().getFirst();
+
+        assertThat(ownPayment).isEqualTo(new OwnPaymentResponse(PAYMENT_ID, AMOUNT, Instant.parse("2026-07-03T14:00:00Z"),
+                LocalDate.parse("2026-07-01"), PaymentMethod.CASH));
+    }
+
+    @Test
+    void shouldReportTheMostRecentOwnPeriodCoveredAsTheLastOne() {
+        LocalDate july = LocalDate.parse("2026-07-01");
+        stubLinkedMember();
+        stubOwnPayments(payment(MEMBER_ID, july), payment(MEMBER_ID, LocalDate.parse("2026-06-01")));
+
+        OwnPaymentsResponse response = paymentService.getOwnPayments(MEMBER_USER);
+
+        assertThat(response.lastPeriodCovered()).isEqualTo(july);
+    }
+
+    @Test
+    void shouldComputeOwnDaysOverdueFromTheMostRecentPeriodCovered() {
+        LocalDate today = LocalDate.now();
+        LocalDate lastPeriod = today.minusMonths(2).withDayOfMonth(1);
+        long expectedDaysOverdue = ChronoUnit.DAYS.between(lastPeriod.plusMonths(1), today);
+        stubLinkedMember();
+        stubOwnPayments(payment(MEMBER_ID, lastPeriod), payment(MEMBER_ID, lastPeriod.minusMonths(1)));
+
+        OwnPaymentsResponse response = paymentService.getOwnPayments(MEMBER_USER);
+
+        assertThat(response.daysOverdue()).isEqualTo(expectedDaysOverdue);
+    }
+
+    @Test
+    void shouldReportNoOwnDaysOverdueWhenTheCurrentMonthIsPaid() {
+        stubLinkedMember();
+        stubOwnPayments(payment(MEMBER_ID, LocalDate.now().withDayOfMonth(1)));
+
+        OwnPaymentsResponse response = paymentService.getOwnPayments(MEMBER_USER);
+
+        assertThat(response.daysOverdue()).isZero();
+    }
+
+    @Test
+    void shouldComputeOwnDaysOverdueFromJoinedAtWhenTheMemberNeverPaid() {
+        long expectedDaysOverdue = ChronoUnit.DAYS.between(LocalDate.parse("2026-01-01"), LocalDate.now());
+        stubLinkedMember();
+        stubOwnPayments();
+
+        OwnPaymentsResponse response = paymentService.getOwnPayments(MEMBER_USER);
+
+        assertThat(response.daysOverdue()).isEqualTo(expectedDaysOverdue);
+    }
+
+    @Test
+    void shouldReportNoLastPeriodCoveredWhenTheMemberNeverPaid() {
+        stubLinkedMember();
+        stubOwnPayments();
+
+        OwnPaymentsResponse response = paymentService.getOwnPayments(MEMBER_USER);
+
+        assertThat(response.lastPeriodCovered()).isNull();
+    }
+
+    @Test
+    void shouldRejectOwnPaymentsWhenTheAccountIsNotLinkedToAMember() {
+        assertThatThrownBy(() -> paymentService.getOwnPayments(SUPER_ADMIN_USER))
+                .isInstanceOf(AccountNotLinkedToMemberException.class)
+                .hasMessage("account 1 is not linked to a member");
+
+        verifyNoInteractions(memberRepository, paymentRepository);
+    }
+
+    @Test
+    void shouldThrowMemberNotFoundWhenTheLinkedMemberIsNotInTheTokenClub() {
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> paymentService.getOwnPayments(MEMBER_USER)).isInstanceOf(MemberNotFoundException.class);
+
+        verifyNoInteractions(paymentRepository);
+    }
+
+    private void stubLinkedMember() {
+        when(memberRepository.findByIdAndClubId(MEMBER_ID, CLUB_ID)).thenReturn(Optional.of(member(MEMBER_ID, null)));
+    }
+
+    private void stubOwnPayments(Payment... payments) {
+        when(paymentRepository.findByMemberIdAndVoidedAtIsNullOrderByPeriodCoveredDesc(MEMBER_ID)).thenReturn(List.of(payments));
     }
 
     private Payment voidedPayment(Long memberId, LocalDate periodCovered) {

@@ -1,6 +1,8 @@
 package com.lazzariniingenieria.clubmanagementapi.service;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.MemberDelinquencyResponse;
+import com.lazzariniingenieria.clubmanagementapi.dto.OwnPaymentResponse;
+import com.lazzariniingenieria.clubmanagementapi.dto.OwnPaymentsResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.PaymentSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecordPaymentBatchRequest;
@@ -9,6 +11,7 @@ import com.lazzariniingenieria.clubmanagementapi.dto.VoidPaymentRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.MemberStatus;
 import com.lazzariniingenieria.clubmanagementapi.entity.Payment;
+import com.lazzariniingenieria.clubmanagementapi.exception.AccountNotLinkedToMemberException;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicatePeriodCoveredException;
 import com.lazzariniingenieria.clubmanagementapi.exception.InvalidDateRangeException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
@@ -117,6 +120,25 @@ public class PaymentService {
         report.sort(Comparator.comparingLong(MemberDelinquencyResponse::daysOverdue).reversed());
 
         return report;
+    }
+
+    public OwnPaymentsResponse getOwnPayments(AuthenticatedUser currentUser) {
+        Long memberId = linkedMemberIdOrThrow(currentUser);
+        Member member = findMemberOrThrow(currentUser.clubId(), memberId);
+        List<Payment> payments = paymentRepository.findByMemberIdAndVoidedAtIsNullOrderByPeriodCoveredDesc(memberId);
+        LocalDate lastPeriodCovered = payments.isEmpty() ? null : payments.getFirst().getPeriodCovered();
+        long daysOverdue = memberDelinquencyCalculator.daysOverdue(member, lastPeriodCovered);
+        List<OwnPaymentResponse> ownPayments = paymentMapper.toOwnPaymentResponseList(payments);
+
+        return new OwnPaymentsResponse(lastPeriodCovered, daysOverdue, ownPayments);
+    }
+
+    private Long linkedMemberIdOrThrow(AuthenticatedUser currentUser) {
+        if (currentUser.memberId() == null) {
+            throw new AccountNotLinkedToMemberException(currentUser.userAccountId());
+        }
+
+        return currentUser.memberId();
     }
 
     private List<Payment> recordPaymentsForMember(AuthenticatedUser currentUser, RecordPaymentRequest request) {
