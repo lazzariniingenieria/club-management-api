@@ -9,6 +9,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.InactiveAdminCannotBeLinkedException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberAccountNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapper;
@@ -79,6 +80,7 @@ public class AdminService {
     public AdminResponse updateAdmin(AuthenticatedUser currentUser, Long adminId, UpdateAdminRequest request) {
         Long clubId = currentUser.clubId();
         UserAccount admin = findAdminOrThrow(clubId, adminId);
+        validateMemberCanBeLinked(admin, request.memberId());
         boolean dniTakenByAnotherAccount = userAccountRepository.existsByClubIdAndDniAndIdNot(clubId, request.dni(), adminId);
 
         if (dniTakenByAnotherAccount) {
@@ -156,6 +158,14 @@ public class AdminService {
         log.info("Promoted member account userAccountId={} of memberId={} to admin in clubId={}", account.getId(), memberId, clubId);
 
         return adminMapper.toResponse(savedAccount);
+    }
+
+    private void validateMemberCanBeLinked(UserAccount admin, Long memberId) {
+        boolean linksAMemberToAnInactiveAdmin = memberId != null && !admin.isActive();
+
+        if (linksAMemberToAnInactiveAdmin) {
+            throw new InactiveAdminCannotBeLinkedException(admin.getId());
+        }
     }
 
     private void removeAdminAccess(UserAccount admin) {

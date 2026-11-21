@@ -23,6 +23,7 @@ import com.lazzariniingenieria.clubmanagementapi.dto.UpdateAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.InactiveAdminCannotBeLinkedException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberAccountNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
@@ -382,6 +383,20 @@ class AdminControllerTest {
                 .andExpect(status().isForbidden());
 
         verify(adminService, never()).promoteMember(any(), any());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenLinkingAMemberToAnInactiveAdmin() throws Exception {
+        String requestBody = readFixture("update-admin-request-valid.json");
+        when(adminService.updateAdmin(any(AuthenticatedUser.class), eq(ADMIN_ID), any(UpdateAdminRequest.class)))
+                .thenThrow(new InactiveAdminCannotBeLinkedException(ADMIN_ID));
+
+        mockMvc.perform(patch("/api/admins/{adminId}", ADMIN_ID)
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("admin " + ADMIN_ID + " is inactive: reactivate it before linking it to a member")));
     }
 
     private AdminResponse adminResponse() {

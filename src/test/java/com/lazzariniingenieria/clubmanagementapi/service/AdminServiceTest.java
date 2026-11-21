@@ -17,6 +17,7 @@ import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.InactiveAdminCannotBeLinkedException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberAccountNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapper;
@@ -418,6 +419,34 @@ class AdminServiceTest {
                 .hasMessage("member 5 has no member account");
 
         verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void shouldRejectLinkingAMemberToAnInactiveAdmin() {
+        UserAccount inactiveAdmin = unlinkedAdminUser(PREVIOUS_ACTOR_ID);
+        inactiveAdmin.setActive(false);
+        UpdateAdminRequest request = new UpdateAdminRequest(DNI, "admin@example.com", LINKED_MEMBER_ID);
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(inactiveAdmin));
+
+        assertThatThrownBy(() -> adminService.updateAdmin(CURRENT_USER, ADMIN_ID, request))
+                .isInstanceOf(InactiveAdminCannotBeLinkedException.class)
+                .hasMessage("admin 10 is inactive: reactivate it before linking it to a member");
+
+        verify(userAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldStillUpdateAnInactiveAdminThatStaysUnlinked() {
+        UserAccount inactiveAdmin = unlinkedAdminUser(PREVIOUS_ACTOR_ID);
+        inactiveAdmin.setActive(false);
+        UpdateAdminRequest request = new UpdateAdminRequest(DNI, "updated@example.com", null);
+        when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(inactiveAdmin));
+        when(userAccountRepository.existsByClubIdAndDniAndIdNot(CLUB_ID, DNI, ADMIN_ID)).thenReturn(false);
+        when(userAccountRepository.save(inactiveAdmin)).thenReturn(inactiveAdmin);
+
+        AdminResponse response = adminService.updateAdmin(CURRENT_USER, ADMIN_ID, request);
+
+        assertThat(response.email()).isEqualTo("updated@example.com");
     }
 
     private UserAccount stubPromotableMemberAccount() {

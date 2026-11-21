@@ -436,4 +436,17 @@ class GlobalExceptionHandlerTest {
         assertThat(body.message()).isEqualTo("Unexpected error");
         assertThat(body.details()).isEmpty();
     }
+
+    @Test
+    void shouldReturnBadRequestWhenLinkingAMemberToAnInactiveAdmin() {
+        InactiveAdminCannotBeLinkedException exception = new InactiveAdminCannotBeLinkedException(10L);
+
+        ResponseEntity<ApiErrorDto> response = globalExceptionHandler.handleInactiveAdminCannotBeLinked(exception);
+        ApiErrorDto body = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.message()).isEqualTo("admin 10 is inactive: reactivate it before linking it to a member");
+        assertThat(body.details()).isEmpty();
+    }
 }
