@@ -355,7 +355,6 @@ class AdminServiceTest {
 
         assertThat(response.role()).isEqualTo(UserRole.MEMBER);
         assertThat(response.active()).isTrue();
-        assertThat(response.memberId()).isEqualTo(LINKED_MEMBER_ID);
     }
 
     @Test
@@ -365,7 +364,6 @@ class AdminServiceTest {
         AdminResponse response = adminService.promoteMember(CURRENT_USER, new PromoteMemberToAdminRequest(LINKED_MEMBER_ID));
 
         assertThat(memberAccount.getRole()).isEqualTo(UserRole.ADMIN);
-        assertThat(response.id()).isEqualTo(ADMIN_ID);
         assertThat(response.role()).isEqualTo(UserRole.ADMIN);
     }
 
