@@ -2,6 +2,7 @@ package com.lazzariniingenieria.clubmanagementapi.controller;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.AdminResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateAdminRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.PromoteMemberToAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.ResetAdminPasswordRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
@@ -33,6 +34,14 @@ public class AdminController {
         AdminResponse response = adminService.createAdmin(currentUser, request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/promote")
+    public ResponseEntity<AdminResponse> promote(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                                  @Valid @RequestBody PromoteMemberToAdminRequest request) {
+        AdminResponse response = adminService.promoteMember(currentUser, request);
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping

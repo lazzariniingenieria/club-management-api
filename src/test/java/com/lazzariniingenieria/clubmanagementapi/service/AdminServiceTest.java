@@ -10,12 +10,14 @@ import static org.mockito.Mockito.when;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.AdminResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateAdminRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.PromoteMemberToAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.ResetAdminPasswordRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberAccountNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapper;
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapperImpl;
@@ -40,6 +42,7 @@ class AdminServiceTest {
     private static final Long ADMIN_ID = 10L;
     private static final Long ACTING_USER_ID = 1L;
     private static final Long PREVIOUS_ACTOR_ID = 99L;
+    private static final Long LINKED_MEMBER_ID = 5L;
     private static final String DNI = "30111222";
     private static final String RAW_PASSWORD = "s3cr3t123";
     private static final String HASHED_PASSWORD = "hashed-password";
@@ -190,8 +193,8 @@ class AdminServiceTest {
     }
 
     @Test
-    void shouldDeactivateAdminWhenFound() {
-        UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
+    void shouldDeactivateAnAdminThatIsNotLinkedToAMember() {
+        UserAccount existingAdmin = unlinkedAdminUser(PREVIOUS_ACTOR_ID);
         when(userAccountRepository.findByIdAndClubIdAndRoleForUpdate(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
                 .thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
@@ -241,7 +244,7 @@ class AdminServiceTest {
 
     @Test
     void shouldReactivateAdminWhenFound() {
-        UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
+        UserAccount existingAdmin = unlinkedAdminUser(PREVIOUS_ACTOR_ID);
         existingAdmin.setActive(false);
         when(userAccountRepository.findByIdAndClubIdAndRole(ADMIN_ID, CLUB_ID, UserRole.ADMIN)).thenReturn(Optional.of(existingAdmin));
         when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
@@ -341,6 +344,102 @@ class AdminServiceTest {
         verifyNoInteractions(refreshTokenService);
     }
 
+    @Test
+    void shouldTurnALinkedAdminIntoAMemberAccountWhenDeactivatingIt() {
+        UserAccount existingAdmin = adminUser(PREVIOUS_ACTOR_ID);
+        when(userAccountRepository.findByIdAndClubIdAndRoleForUpdate(ADMIN_ID, CLUB_ID, UserRole.ADMIN))
+                .thenReturn(Optional.of(existingAdmin));
+        when(userAccountRepository.save(existingAdmin)).thenReturn(existingAdmin);
+
+        AdminResponse response = adminService.deactivateAdmin(CURRENT_USER, ADMIN_ID);
+
+        assertThat(response.role()).isEqualTo(UserRole.MEMBER);
+        assertThat(response.active()).isTrue();
+        assertThat(response.memberId()).isEqualTo(LINKED_MEMBER_ID);
+    }
+
+    @Test
+    void shouldPromoteTheMemberAccountToAdmin() {
+        UserAccount memberAccount = stubPromotableMemberAccount();
+
+        AdminResponse response = adminService.promoteMember(CURRENT_USER, new PromoteMemberToAdminRequest(LINKED_MEMBER_ID));
+
+        assertThat(memberAccount.getRole()).isEqualTo(UserRole.ADMIN);
+        assertThat(response.id()).isEqualTo(ADMIN_ID);
+        assertThat(response.role()).isEqualTo(UserRole.ADMIN);
+    }
+
+    @Test
+    void shouldRevokeSessionsWhenPromotingSoTheMemberTokenStopsWorking() {
+        Instant beforePromotion = Instant.now();
+        UserAccount memberAccount = stubPromotableMemberAccount();
+
+        adminService.promoteMember(CURRENT_USER, new PromoteMemberToAdminRequest(LINKED_MEMBER_ID));
+
+        assertThat(memberAccount.getSessionsRevokedAt()).isBetween(beforePromotion, Instant.now());
+    }
+
+    @Test
+    void shouldRevokeRefreshTokensWhenPromotingAMember() {
+        stubPromotableMemberAccount();
+
+        adminService.promoteMember(CURRENT_USER, new PromoteMemberToAdminRequest(LINKED_MEMBER_ID));
+
+        verify(refreshTokenService).revokeActiveTokens(ADMIN_ID);
+    }
+
+    @Test
+    void shouldRecordWhoPromotedTheMemberWithoutTouchingTheCreator() {
+        UserAccount memberAccount = stubPromotableMemberAccount();
+
+        adminService.promoteMember(CURRENT_USER, new PromoteMemberToAdminRequest(LINKED_MEMBER_ID));
+
+        assertThat(memberAccount.getUpdatedByUserId()).isEqualTo(ACTING_USER_ID);
+        assertThat(memberAccount.getCreatedByUserId()).isEqualTo(PREVIOUS_ACTOR_ID);
+    }
+
+    @Test
+    void shouldThrowMemberNotFoundWhenPromotingAMemberOfAnotherClub() {
+        when(memberRepository.existsByIdAndClubId(LINKED_MEMBER_ID, CLUB_ID)).thenReturn(false);
+        PromoteMemberToAdminRequest request = new PromoteMemberToAdminRequest(LINKED_MEMBER_ID);
+
+        assertThatThrownBy(() -> adminService.promoteMember(CURRENT_USER, request)).isInstanceOf(MemberNotFoundException.class);
+
+        verifyNoInteractions(userAccountRepository, refreshTokenService);
+    }
+
+    @Test
+    void shouldThrowMemberAccountNotFoundWhenTheMemberHasNoMemberAccountToPromote() {
+        when(memberRepository.existsByIdAndClubId(LINKED_MEMBER_ID, CLUB_ID)).thenReturn(true);
+        when(userAccountRepository.findByMemberIdAndClubIdAndRoleForUpdate(LINKED_MEMBER_ID, CLUB_ID, UserRole.MEMBER))
+                .thenReturn(Optional.empty());
+        PromoteMemberToAdminRequest request = new PromoteMemberToAdminRequest(LINKED_MEMBER_ID);
+
+        assertThatThrownBy(() -> adminService.promoteMember(CURRENT_USER, request))
+                .isInstanceOf(MemberAccountNotFoundException.class)
+                .hasMessage("member 5 has no member account");
+
+        verifyNoInteractions(refreshTokenService);
+    }
+
+    private UserAccount stubPromotableMemberAccount() {
+        UserAccount memberAccount = adminUser(PREVIOUS_ACTOR_ID);
+        memberAccount.setRole(UserRole.MEMBER);
+        when(memberRepository.existsByIdAndClubId(LINKED_MEMBER_ID, CLUB_ID)).thenReturn(true);
+        when(userAccountRepository.findByMemberIdAndClubIdAndRoleForUpdate(LINKED_MEMBER_ID, CLUB_ID, UserRole.MEMBER))
+                .thenReturn(Optional.of(memberAccount));
+        when(userAccountRepository.save(memberAccount)).thenReturn(memberAccount);
+
+        return memberAccount;
+    }
+
+    private UserAccount unlinkedAdminUser(Long actorId) {
+        UserAccount admin = adminUser(actorId);
+        admin.setMemberId(null);
+
+        return admin;
+    }
+
     private UserAccount adminUser() {
         return adminUser(ACTING_USER_ID);
     }
@@ -349,7 +448,7 @@ class AdminServiceTest {
         return UserAccount.builder()
                 .id(ADMIN_ID)
                 .clubId(CLUB_ID)
-                .memberId(5L)
+                .memberId(LINKED_MEMBER_ID)
                 .dni(DNI)
                 .passwordHash(HASHED_PASSWORD)
                 .role(UserRole.ADMIN)

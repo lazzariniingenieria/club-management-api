@@ -17,11 +17,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
 import com.lazzariniingenieria.clubmanagementapi.dto.AdminResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateAdminRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.PromoteMemberToAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.ResetAdminPasswordRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberAccountNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.security.AuthenticatedUser;
 import com.lazzariniingenieria.clubmanagementapi.security.JwtService;
 import com.lazzariniingenieria.clubmanagementapi.service.AccountSessionService;
@@ -213,7 +215,7 @@ class AdminControllerTest {
 
     @Test
     void shouldDeactivateAdmin() throws Exception {
-        AdminResponse deactivated = new AdminResponse(ADMIN_ID, "30222333", "admin@example.com", 5L, false,
+        AdminResponse deactivated = new AdminResponse(ADMIN_ID, "30222333", "admin@example.com", null, UserRole.ADMIN, false,
                 Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-02T00:00:00Z"), 1L, 1L);
         when(adminService.deactivateAdmin(any(AuthenticatedUser.class), eq(ADMIN_ID))).thenReturn(deactivated);
 
@@ -315,8 +317,75 @@ class AdminControllerTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void shouldReturnTheLinkedAdminAsAMemberAccountWhenDeactivatingIt() throws Exception {
+        AdminResponse demoted = new AdminResponse(ADMIN_ID, "30222333", "admin@example.com", 5L, UserRole.MEMBER, true,
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-02T00:00:00Z"), 1L, 1L);
+        when(adminService.deactivateAdmin(any(AuthenticatedUser.class), eq(ADMIN_ID))).thenReturn(demoted);
+
+        mockMvc.perform(patch("/api/admins/{adminId}/deactivate", ADMIN_ID).with(asSuperAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role", is("MEMBER")))
+                .andExpect(jsonPath("$.active", is(true)));
+    }
+
+    @Test
+    void shouldPromoteTheMemberAccountWhenRequesterIsSuperAdmin() throws Exception {
+        String requestBody = readFixture("promote-member-request-valid.json");
+        PromoteMemberToAdminRequest expectedRequest = new PromoteMemberToAdminRequest(34L);
+        when(adminService.promoteMember(any(AuthenticatedUser.class), eq(expectedRequest))).thenReturn(adminResponse());
+
+        mockMvc.perform(post("/api/admins/promote")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role", is("ADMIN")));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenPromotingWithoutMemberId() throws Exception {
+        String requestBody = readFixture("promote-member-request-missing-member-id.json");
+
+        mockMvc.perform(post("/api/admins/promote")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem("memberId: memberId is required")));
+
+        verify(adminService, never()).promoteMember(any(), any());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenPromotingAMemberWithoutAMemberAccount() throws Exception {
+        String requestBody = readFixture("promote-member-request-valid.json");
+        when(adminService.promoteMember(any(AuthenticatedUser.class), any(PromoteMemberToAdminRequest.class)))
+                .thenThrow(new MemberAccountNotFoundException(34L));
+
+        mockMvc.perform(post("/api/admins/promote")
+                        .with(asSuperAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message", is("member 34 has no member account")));
+    }
+
+    @Test
+    void shouldRejectAdminWhenPromotingAMember() throws Exception {
+        String requestBody = readFixture("promote-member-request-valid.json");
+
+        mockMvc.perform(post("/api/admins/promote")
+                        .with(asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isForbidden());
+
+        verify(adminService, never()).promoteMember(any(), any());
+    }
+
     private AdminResponse adminResponse() {
-        return new AdminResponse(ADMIN_ID, "30222333", "admin@example.com", 5L, true,
+        return new AdminResponse(ADMIN_ID, "30222333", "admin@example.com", 5L, UserRole.ADMIN, true,
                 Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"), 1L, 1L);
     }
 
