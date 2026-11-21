@@ -1,11 +1,13 @@
 package com.lazzariniingenieria.clubmanagementapi.service;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateRecurringSlotRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotCreatedResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RenewRecurringSlotRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.Court;
 import com.lazzariniingenieria.clubmanagementapi.entity.CourtBlock;
+import com.lazzariniingenieria.clubmanagementapi.entity.Member;
 import com.lazzariniingenieria.clubmanagementapi.entity.RecurringSlot;
 import com.lazzariniingenieria.clubmanagementapi.entity.RecurringSlotState;
 import com.lazzariniingenieria.clubmanagementapi.entity.Reservation;
@@ -55,21 +57,23 @@ public class RecurringSlotService {
     private final CourtBookingRules courtBookingRules;
     private final ReservationService reservationService;
     private final RecurringSlotMapper recurringSlotMapper;
+    private final MemberDelinquencyCalculator memberDelinquencyCalculator;
     private final Clock clubClock;
 
     @Transactional
-    public RecurringSlotResponse createRecurringSlot(AuthenticatedUser currentUser, CreateRecurringSlotRequest request) {
+    public RecurringSlotCreatedResponse createRecurringSlot(AuthenticatedUser currentUser, CreateRecurringSlotRequest request) {
         String description = normalizedDescription(request.description());
-        validateRules(currentUser.clubId(), request, description);
+        Member owner = validateRulesAndLockOwner(currentUser.clubId(), request, description);
         List<LocalDate> dates = upcomingDates(request);
         validateNoConflicts(request, dates);
 
         RecurringSlot savedSlot = recurringSlotRepository.save(newRecurringSlot(currentUser, request, description));
         reservationRepository.saveAll(occurrencesOf(savedSlot, dates));
-        log.info("Created recurringSlotId={} on courtId={} for memberId={} with {} reservation(s) in clubId={}", savedSlot.getId(),
-                savedSlot.getCourtId(), savedSlot.getMemberId(), dates.size(), currentUser.clubId());
+        Long memberDaysOverdue = owner != null ? memberDelinquencyCalculator.daysOverdue(owner) : null;
+        log.info("Created recurringSlotId={} on courtId={} for memberId={} ({} days overdue) with {} reservation(s) in clubId={}",
+                savedSlot.getId(), savedSlot.getCourtId(), savedSlot.getMemberId(), memberDaysOverdue, dates.size(), currentUser.clubId());
 
-        return toResponse(savedSlot);
+        return new RecurringSlotCreatedResponse(toResponse(savedSlot), memberDaysOverdue);
     }
 
     public List<RecurringSlotResponse> listRecurringSlots(Long clubId, RecurringSlotSearchRequest filter) {
@@ -110,14 +114,15 @@ public class RecurringSlotService {
     }
 
     @Transactional
-    public RecurringSlotResponse renewRecurringSlot(AuthenticatedUser currentUser, Long recurringSlotId,
+    public RecurringSlotCreatedResponse renewRecurringSlot(AuthenticatedUser currentUser, Long recurringSlotId,
                                                     RenewRecurringSlotRequest request) {
         RecurringSlot original = findRecurringSlotOrThrow(currentUser.clubId(), recurringSlotId);
         CreateRecurringSlotRequest renewal = new CreateRecurringSlotRequest(original.getCourtId(), original.getMemberId(),
                 original.getDescription(), original.getDayOfWeek(), original.getStartTime(), original.getEndTime(), request.validFrom(),
                 request.validUntil());
-        RecurringSlotResponse response = createRecurringSlot(currentUser, renewal);
-        log.info("Renewed recurringSlotId={} as recurringSlotId={} in clubId={}", recurringSlotId, response.id(), currentUser.clubId());
+        RecurringSlotCreatedResponse response = createRecurringSlot(currentUser, renewal);
+        RecurringSlotResponse renewedSlot = response.recurringSlot();
+        log.info("Renewed recurringSlotId={} as recurringSlotId={} in clubId={}", recurringSlotId, renewedSlot.id(), currentUser.clubId());
 
         return response;
     }
@@ -138,15 +143,17 @@ public class RecurringSlotService {
         return activeSlots.size();
     }
 
-    private void validateRules(Long clubId, CreateRecurringSlotRequest request, String description) {
+    private Member validateRulesAndLockOwner(Long clubId, CreateRecurringSlotRequest request, String description) {
         courtBookingRules.validateCourtsEnabled(clubId);
         Court court = courtBookingRules.lockActiveCourtOrThrow(clubId, request.courtId());
-        validateOwner(clubId, request.memberId(), description);
+        Member owner = validateAndLockOwner(clubId, request.memberId(), description);
         courtBookingRules.validateFitsCourtHours(court, request.startTime(), request.endTime());
         validateValidity(request.validFrom(), request.validUntil());
+
+        return owner;
     }
 
-    private void validateOwner(Long clubId, Long memberId, String description) {
+    private Member validateAndLockOwner(Long clubId, Long memberId, String description) {
         boolean hasMember = memberId != null;
         boolean hasDescription = description != null;
 
@@ -154,9 +161,11 @@ public class RecurringSlotService {
             throw new InvalidReservationException("recurring slot needs exactly one of memberId or description");
         }
 
-        if (hasMember) {
-            courtBookingRules.lockActiveMember(clubId, memberId);
+        if (!hasMember) {
+            return null;
         }
+
+        return courtBookingRules.lockActiveMember(clubId, memberId);
     }
 
     private void validateValidity(LocalDate validFrom, LocalDate validUntil) {

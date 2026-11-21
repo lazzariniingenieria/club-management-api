@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.lazzariniingenieria.clubmanagementapi.config.SecurityConfig;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateRecurringSlotRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotCreatedResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.RecurringSlotSearchRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.RenewRecurringSlotRequest;
@@ -72,7 +73,7 @@ class RecurringSlotControllerTest {
     void shouldReturnCreatedRecurringSlotWhenRequesterIsAdmin() throws Exception {
         String requestBody = readFixture("create-recurring-slot-request-valid.json");
         when(recurringSlotService.createRecurringSlot(any(AuthenticatedUser.class), any(CreateRecurringSlotRequest.class)))
-                .thenReturn(recurringSlotResponse(true, RecurringSlotState.CURRENT));
+                .thenReturn(new RecurringSlotCreatedResponse(recurringSlotResponse(true, RecurringSlotState.CURRENT), 39L));
 
         mockMvc.perform(post("/api/recurring-slots")
                         .with(asAdmin())
@@ -83,7 +84,9 @@ class RecurringSlotControllerTest {
                 .andExpect(jsonPath("$.dayOfWeek", is("TUESDAY")))
                 .andExpect(jsonPath("$.startTime", is("18:00:00")))
                 .andExpect(jsonPath("$.validUntil", is("2027-03-30")))
-                .andExpect(jsonPath("$.state", is("CURRENT")));
+                .andExpect(jsonPath("$.state", is("CURRENT")))
+                .andExpect(jsonPath("$.memberDaysOverdue", is(39)))
+                .andExpect(jsonPath("$.recurringSlot").doesNotExist());
     }
 
     @Test
@@ -92,7 +95,7 @@ class RecurringSlotControllerTest {
         CreateRecurringSlotRequest expected = new CreateRecurringSlotRequest(COURT_ID, MEMBER_ID, null, DayOfWeek.TUESDAY,
                 LocalTime.of(18, 0), LocalTime.of(19, 0), LocalDate.parse("2026-11-10"), LocalDate.parse("2027-03-30"));
         when(recurringSlotService.createRecurringSlot(any(AuthenticatedUser.class), eq(expected)))
-                .thenReturn(recurringSlotResponse(true, RecurringSlotState.CURRENT));
+                .thenReturn(new RecurringSlotCreatedResponse(recurringSlotResponse(true, RecurringSlotState.CURRENT), 39L));
 
         mockMvc.perform(post("/api/recurring-slots")
                         .with(asSuperAdmin())
@@ -224,13 +227,15 @@ class RecurringSlotControllerTest {
         String requestBody = readFixture("renew-recurring-slot-request-valid.json");
         RenewRecurringSlotRequest expected = new RenewRecurringSlotRequest(LocalDate.parse("2027-03-31"), LocalDate.parse("2027-11-30"));
         when(recurringSlotService.renewRecurringSlot(any(AuthenticatedUser.class), eq(RECURRING_SLOT_ID), eq(expected)))
-                .thenReturn(recurringSlotResponse(true, RecurringSlotState.CURRENT));
+                .thenReturn(new RecurringSlotCreatedResponse(recurringSlotResponse(true, RecurringSlotState.CURRENT), 39L));
 
         mockMvc.perform(post("/api/recurring-slots/{recurringSlotId}/renew", RECURRING_SLOT_ID)
                         .with(asAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id", is(30)))
+                .andExpect(jsonPath("$.memberDaysOverdue", is(39)));
     }
 
     @Test
