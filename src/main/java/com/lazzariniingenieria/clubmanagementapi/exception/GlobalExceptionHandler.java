@@ -113,6 +113,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(AccountNotLinkedToMemberException.class)
+    public ResponseEntity<ApiErrorDto> handleAccountNotLinkedToMember(AccountNotLinkedToMemberException exception) {
+        log.warn("Own data requested by an account without a member: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(ClubNotFoundException.class)
     public ResponseEntity<ApiErrorDto> handleClubNotFound(ClubNotFoundException exception) {
         log.error("Club from a valid token has no club row: {}", exception.getMessage());
