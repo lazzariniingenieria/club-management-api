@@ -60,7 +60,7 @@ class MeControllerTest {
     void shouldReturnTheOwnPaymentsAndAccountStatusWhenRequesterIsAMember() throws Exception {
         when(paymentService.getOwnPayments(MEMBER_USER)).thenReturn(ownPaymentsResponse());
 
-        mockMvc.perform(get("/api/me/payments").with(as(MEMBER_USER)))
+        mockMvc.perform(get("/api/me/payments").with(authenticatedAs(MEMBER_USER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.lastPeriodCovered", is("2026-07-01")))
                 .andExpect(jsonPath("$.daysOverdue", is(12)))
@@ -76,7 +76,7 @@ class MeControllerTest {
     void shouldNotExposeWhoRecordedOrVoidedThePaymentToTheMember() throws Exception {
         when(paymentService.getOwnPayments(MEMBER_USER)).thenReturn(ownPaymentsResponse());
 
-        mockMvc.perform(get("/api/me/payments").with(as(MEMBER_USER)))
+        mockMvc.perform(get("/api/me/payments").with(authenticatedAs(MEMBER_USER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.payments[0].recordedByUserId").doesNotExist())
                 .andExpect(jsonPath("$.payments[0].voidedByUserId").doesNotExist())
@@ -87,7 +87,7 @@ class MeControllerTest {
     void shouldReturnTheOwnPaymentsWhenRequesterIsAnAdminWhoIsAlsoAMember() throws Exception {
         when(paymentService.getOwnPayments(ADMIN_MEMBER_USER)).thenReturn(ownPaymentsResponse());
 
-        mockMvc.perform(get("/api/me/payments").with(as(ADMIN_MEMBER_USER)))
+        mockMvc.perform(get("/api/me/payments").with(authenticatedAs(ADMIN_MEMBER_USER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.payments.length()", is(1)));
     }
@@ -96,7 +96,7 @@ class MeControllerTest {
     void shouldReturnNotFoundWhenTheAccountIsNotLinkedToAMember() throws Exception {
         when(paymentService.getOwnPayments(SUPER_ADMIN_USER)).thenThrow(new AccountNotLinkedToMemberException(1L));
 
-        mockMvc.perform(get("/api/me/payments").with(as(SUPER_ADMIN_USER)))
+        mockMvc.perform(get("/api/me/payments").with(authenticatedAs(SUPER_ADMIN_USER)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message", is("account 1 is not linked to a member")));
     }
@@ -116,7 +116,7 @@ class MeControllerTest {
         return new OwnPaymentsResponse(LocalDate.parse("2026-07-01"), 12, List.of(payment));
     }
 
-    private RequestPostProcessor as(AuthenticatedUser principal) {
+    private RequestPostProcessor authenticatedAs(AuthenticatedUser principal) {
         String roleAuthority = "ROLE_" + principal.role().name();
 
         return authentication(new UsernamePasswordAuthenticationToken(principal, null, List.of(new SimpleGrantedAuthority(roleAuthority))));

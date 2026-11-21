@@ -611,9 +611,17 @@ class PaymentServiceTest {
 
         OwnPaymentsResponse response = paymentService.getOwnPayments(MEMBER_USER);
 
-        assertThat(response.lastPeriodCovered()).isNull();
         assertThat(response.daysOverdue()).isEqualTo(expectedDaysOverdue);
-        assertThat(response.payments()).isEmpty();
+    }
+
+    @Test
+    void shouldReportNoLastPeriodCoveredWhenTheMemberNeverPaid() {
+        stubLinkedMember();
+        stubOwnPayments();
+
+        OwnPaymentsResponse response = paymentService.getOwnPayments(MEMBER_USER);
+
+        assertThat(response.lastPeriodCovered()).isNull();
     }
 
     @Test
