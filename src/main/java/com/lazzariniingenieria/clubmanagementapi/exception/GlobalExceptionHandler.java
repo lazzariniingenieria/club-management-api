@@ -64,6 +64,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), List.of());
     }
 
+    @ExceptionHandler(InactiveAdminCannotBeLinkedException.class)
+    public ResponseEntity<ApiErrorDto> handleInactiveAdminCannotBeLinked(InactiveAdminCannotBeLinkedException exception) {
+        log.warn("Rejected linking a member to an inactive admin: {}", exception.getMessage());
+
+        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
     @ExceptionHandler(MemberNotFoundException.class)
     public ResponseEntity<ApiErrorDto> handleMemberNotFound(MemberNotFoundException exception) {
         log.warn("Member lookup failed: {}", exception.getMessage());

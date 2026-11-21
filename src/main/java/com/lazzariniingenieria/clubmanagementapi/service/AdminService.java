@@ -2,12 +2,15 @@ package com.lazzariniingenieria.clubmanagementapi.service;
 
 import com.lazzariniingenieria.clubmanagementapi.dto.AdminResponse;
 import com.lazzariniingenieria.clubmanagementapi.dto.CreateAdminRequest;
+import com.lazzariniingenieria.clubmanagementapi.dto.PromoteMemberToAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.ResetAdminPasswordRequest;
 import com.lazzariniingenieria.clubmanagementapi.dto.UpdateAdminRequest;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserAccount;
 import com.lazzariniingenieria.clubmanagementapi.entity.UserRole;
 import com.lazzariniingenieria.clubmanagementapi.exception.AdminNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.DuplicateDniException;
+import com.lazzariniingenieria.clubmanagementapi.exception.InactiveAdminCannotBeLinkedException;
+import com.lazzariniingenieria.clubmanagementapi.exception.MemberAccountNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.exception.MemberNotFoundException;
 import com.lazzariniingenieria.clubmanagementapi.mapper.AdminMapper;
 import com.lazzariniingenieria.clubmanagementapi.repository.MemberRepository;
@@ -77,6 +80,7 @@ public class AdminService {
     public AdminResponse updateAdmin(AuthenticatedUser currentUser, Long adminId, UpdateAdminRequest request) {
         Long clubId = currentUser.clubId();
         UserAccount admin = findAdminOrThrow(clubId, adminId);
+        validateMemberCanBeLinked(admin, request.memberId());
         boolean dniTakenByAnotherAccount = userAccountRepository.existsByClubIdAndDniAndIdNot(clubId, request.dni(), adminId);
 
         if (dniTakenByAnotherAccount) {
@@ -100,13 +104,14 @@ public class AdminService {
     public AdminResponse deactivateAdmin(AuthenticatedUser currentUser, Long adminId) {
         Long clubId = currentUser.clubId();
         UserAccount admin = findAdminForUpdateOrThrow(clubId, adminId);
-        admin.setActive(false);
+        removeAdminAccess(admin);
         admin.setSessionsRevokedAt(Instant.now());
         markUpdated(admin, currentUser.userAccountId());
 
         UserAccount savedAdmin = userAccountRepository.save(admin);
         refreshTokenService.revokeActiveTokens(adminId);
-        log.info("Deactivated admin userAccountId={} for clubId={}", adminId, clubId);
+        log.info("Deactivated admin userAccountId={} for clubId={}: now role={} active={}", adminId, clubId, admin.getRole(),
+                admin.isActive());
 
         return adminMapper.toResponse(savedAdmin);
     }
@@ -138,6 +143,41 @@ public class AdminService {
         return adminMapper.toResponse(savedAdmin);
     }
 
+    @Transactional
+    public AdminResponse promoteMember(AuthenticatedUser currentUser, PromoteMemberToAdminRequest request) {
+        Long clubId = currentUser.clubId();
+        Long memberId = request.memberId();
+        validateMemberBelongsToClub(clubId, memberId);
+        UserAccount account = findMemberAccountForUpdateOrThrow(clubId, memberId);
+        account.setRole(UserRole.ADMIN);
+        account.setSessionsRevokedAt(Instant.now());
+        markUpdated(account, currentUser.userAccountId());
+
+        UserAccount savedAccount = userAccountRepository.save(account);
+        refreshTokenService.revokeActiveTokens(account.getId());
+        log.info("Promoted member account userAccountId={} of memberId={} to admin in clubId={}", account.getId(), memberId, clubId);
+
+        return adminMapper.toResponse(savedAccount);
+    }
+
+    private void validateMemberCanBeLinked(UserAccount admin, Long memberId) {
+        boolean linksAMemberToAnInactiveAdmin = memberId != null && !admin.isActive();
+
+        if (linksAMemberToAnInactiveAdmin) {
+            throw new InactiveAdminCannotBeLinkedException(admin.getId());
+        }
+    }
+
+    private void removeAdminAccess(UserAccount admin) {
+        if (admin.getMemberId() != null) {
+            admin.setRole(UserRole.MEMBER);
+
+            return;
+        }
+
+        admin.setActive(false);
+    }
+
     private void validateMemberBelongsToClub(Long clubId, Long memberId) {
         if (memberId == null) {
             return;
@@ -159,6 +199,12 @@ public class AdminService {
         return userAccountRepository
                 .findByIdAndClubIdAndRole(adminId, clubId, UserRole.ADMIN)
                 .orElseThrow(() -> new AdminNotFoundException(adminId));
+    }
+
+    private UserAccount findMemberAccountForUpdateOrThrow(Long clubId, Long memberId) {
+        return userAccountRepository
+                .findByMemberIdAndClubIdAndRoleForUpdate(memberId, clubId, UserRole.MEMBER)
+                .orElseThrow(() -> new MemberAccountNotFoundException(memberId));
     }
 
     private UserAccount findAdminForUpdateOrThrow(Long clubId, Long adminId) {
