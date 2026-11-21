@@ -560,6 +560,34 @@ class RecurringSlotServiceTest {
     }
 
     @Test
+    void shouldReportDaysOverdueOfTheMemberWhenRenewingTheirSlot() {
+        stubExistingSlot(slot(false));
+        stubClubCourtAndMember();
+        stubSaveSlot();
+
+        RecurringSlotCreatedResponse response = recurringSlotService.renewRecurringSlot(CURRENT_USER, RECURRING_SLOT_ID,
+                new RenewRecurringSlotRequest(NEXT_TUESDAY, FOURTH_TUESDAY));
+
+        assertThat(response.memberDaysOverdue()).isEqualTo(39);
+    }
+
+    @Test
+    void shouldReportNoDaysOverdueWhenRenewingAClubActivity() {
+        RecurringSlot activity = slot(false);
+        activity.setMemberId(null);
+        activity.setDescription("Escuela de tenis");
+        stubExistingSlot(activity);
+        stubClubAndCourt();
+        stubSaveSlot();
+
+        RecurringSlotCreatedResponse response = recurringSlotService.renewRecurringSlot(CURRENT_USER, RECURRING_SLOT_ID,
+                new RenewRecurringSlotRequest(NEXT_TUESDAY, FOURTH_TUESDAY));
+
+        assertThat(response.memberDaysOverdue()).isNull();
+        verifyNoInteractions(paymentRepository);
+    }
+
+    @Test
     void shouldThrowRecurringSlotNotFoundWhenRenewingAMissingSlot() {
         when(recurringSlotRepository.findById(RECURRING_SLOT_ID)).thenReturn(Optional.empty());
         RenewRecurringSlotRequest request = new RenewRecurringSlotRequest(NEXT_TUESDAY, FOURTH_TUESDAY);
